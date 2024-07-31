@@ -2,7 +2,7 @@
 clear
 # Minta token bot dan chat ID dari pengguna
 echo -e "•••• SETUP BOT ••••"
-read -p "Masukkan Token Bot Telegram Anda: " DO_TOKEN
+read -p "Masukkan Token DO Anda: " DO_TOKEN
 
 # Perbarui paket dan instal Python3-pip jika belum ada
 apt-get update
@@ -15,8 +15,8 @@ pip3 install pyTelegramBotAPI
 
 cd
 # Buat direktori proyek
-mkdir -p san/bot/do
-cd san/bot/do
+mkdir -p san/bot
+cd san/bot
 
 # Buat file script python
 cat <<EOF > do.py
@@ -185,7 +185,7 @@ After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/root/san/bot/do
+WorkingDirectory=/root/san/bot
 ExecStart=/usr/bin/python3 do.py
 Restart=always
 
