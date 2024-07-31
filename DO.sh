@@ -15,8 +15,8 @@ pip3 install pyTelegramBotAPI
 
 cd
 # Buat direktori proyek
-mkdir -p san/bot
-cd san/bot
+mkdir -p /root/san/bot
+cd /root/san/bot
 
 # Buat file script python
 cat <<EOF > do.py
