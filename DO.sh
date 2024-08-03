@@ -96,7 +96,7 @@ def handle_size_callback(call: CallbackQuery):
 
     # Parameter lain untuk membuat droplet
     region = 'sgp1'  
-    image = 'debian-10-x64'  
+    image = 'ubuntu-20-04-x64'  
     
     # Membuat payload untuk request API DigitalOcean
     data = {
