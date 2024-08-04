@@ -27,11 +27,10 @@ import time
 
 # Masukkan token bot telegram Anda di sini
 TOKEN = '7326202667:AAHShtcwXkt51IMU8tIdAF9zZanoTvDDZ9A'
-
 # Masukkan token API DigitalOcean Anda di sini
-DO_TOKEN = '${DO_TOKEN}'
+DO_TOKEN = '{DO_TOKEN}'
 
-# URL endpoint untuk membuat droplet di DigitalOcean
+# URL endpoint untuk membuat dan mengelola droplet di DigitalOcean
 DO_DROPLET_URL = 'https://api.digitalocean.com/v2/droplets'
 
 # Default root password
@@ -40,7 +39,7 @@ ROOT_PASSWORD = '@1Vpsbysan'
 # Inisialisasi objek bot
 bot = telebot.TeleBot(TOKEN)
 
-# Admin ChatID
+# Chat ID admin
 ADMIN_CHAT_ID = 576495165
 
 # Dictionary untuk memetakan opsi ukuran dengan kode ukuran DigitalOcean yang sesuai
@@ -50,55 +49,63 @@ size_options = {
     '3 TB / 2GB RAM': 's-2vcpu-2gb-amd',
     '4 TB / 4GB RAM': 's-2vcpu-4gb-amd',
     '5 TB / 8GB RAM': 's-4vcpu-8gb-amd',
-    # Tambahkan lebih banyak opsi ukuran jika diperlukan
 }
 
-# Dictionary untuk menyimpan nama droplet yang diinput oleh pengguna
+# Dictionary untuk menyimpan data pengguna sementara
 user_data = {}
 
-@bot.message_handler(commands=['create'])
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    chat_id = message.chat.id
+    if chat_id == ADMIN_CHAT_ID:
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(InlineKeyboardButton("CREATE", callback_data="create"))
+        keyboard.add(InlineKeyboardButton("DELETE", callback_data="delete"))
+        keyboard.add(InlineKeyboardButton("LIST DROPLET", callback_data="list_droplet"))
+        bot.send_message(chat_id, "Welcome, Admin! Choose an option:", reply_markup=keyboard)
+    else:
+        bot.send_message(chat_id, "You are not authorized to use this bot.")
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call: CallbackQuery):
+    if call.data == "create":
+        request_droplet_name(call.message)
+    elif call.data == "delete":
+        request_droplet_name_for_delete(call.message)
+    elif call.data == "list_droplet":
+        list_droplets(call.message)
+    elif call.data.startswith("size_"):
+        handle_size_callback(call)
+
 def request_droplet_name(message):
     chat_id = message.chat.id
-    if chat_id != ADMIN_CHAT_ID:
-        bot.send_message(chat_id, 'Anda tidak memiliki izin untuk menggunakan perintah ini.')
-        return
-    bot.send_message(chat_id, 'Masukkan nama droplet:')
+    bot.send_message(chat_id, 'Enter droplet name:')
     bot.register_next_step_handler(message, create_droplet)
 
 def create_droplet(message):
     chat_id = message.chat.id
     droplet_name = message.text
-    user_data[chat_id] = {'name': droplet_name}  # Simpan nama droplet di user_data
-    # Membuat InlineKeyboard untuk memilih ukuran droplet
+    user_data[chat_id] = {'name': droplet_name}
+    
     size_keyboard = InlineKeyboardMarkup(row_width=1)
     for size_label, size_code in size_options.items():
         button = InlineKeyboardButton(text=size_label, callback_data=f"size_{size_code}")
         size_keyboard.add(button)
     
-    bot.send_message(chat_id, 'Pilih ukuran droplet:', reply_markup=size_keyboard)
+    bot.send_message(chat_id, 'Select droplet size:', reply_markup=size_keyboard)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('size_'))
 def handle_size_callback(call: CallbackQuery):
     chat_id = call.message.chat.id
-    if chat_id != ADMIN_CHAT_ID:
-        bot.send_message(chat_id, 'Anda tidak memiliki izin untuk menggunakan perintah ini.')
-        return
-    size_code = call.data.split('_')[1]  # Mendapatkan kode ukuran dari data callback
-    droplet_name = user_data.get(chat_id, {}).get('name')  # Mendapatkan nama droplet dari user_data
-
-    if not droplet_name:
-        bot.send_message(chat_id, 'Terjadi kesalahan. Silakan mulai lagi.')
-        return
-
-    if size_code not in size_options.values():
-        bot.send_message(chat_id, 'Ukuran droplet tidak valid. Silakan coba lagi.')
-        return
-
-    # Parameter lain untuk membuat droplet
-    region = 'sgp1'  
-    image = 'ubuntu-20-04-x64'  
+    size_code = call.data.split('_')[1]
+    droplet_name = user_data.get(chat_id, {}).get('name')
     
-    # Membuat payload untuk request API DigitalOcean
+    if not droplet_name:
+        bot.send_message(chat_id, 'Error occurred. Please start again.')
+        return
+
+    region = 'sgp1'
+    image = 'ubuntu-20-04-x64'
+    
     data = {
         'name': droplet_name,
         'region': region,
@@ -110,26 +117,27 @@ def handle_size_callback(call: CallbackQuery):
                         '''
     }
     
-    # Header untuk autentikasi dengan token API DigitalOcean
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {DO_TOKEN}'
     }
     
-    # Mengirim request untuk membuat droplet
     response = requests.post(DO_DROPLET_URL, json=data, headers=headers)
     
     if response.status_code == 202:
-        bot.send_message(chat_id, 'Droplet berhasil dibuat! Menunggu 60 detik sebelum mengambil informasi...')
+        bot.send_message(chat_id, 'Droplet created successfully! Waiting 60 seconds to fetch information...')
         time.sleep(60)
         droplet_info = get_droplet_info(response.json()['droplet']['id'])
-        respon = "INFORMASI DROPLET\n"
-        respon += f"NAMA: {droplet_info['name']}\n"
-        respon += f"ID: {droplet_info['id']}\n"
-        respon += f"IP: {droplet_info['ip_address']}"
-        bot.send_message(chat_id, respon)
+        if droplet_info:
+            respon = "DROPLET INFORMATION\n"
+            respon += f"Name: {droplet_info['name']}\n"
+            respon += f"ID: {droplet_info['id']}\n"
+            respon += f"Public IP: {droplet_info['ip_address']}"
+            bot.send_message(chat_id, respon)
+        else:
+            bot.send_message(chat_id, 'Failed to retrieve droplet information.')
     else:
-        bot.send_message(chat_id, 'Gagal membuat droplet. Silakan coba lagi.')
+        bot.send_message(chat_id, 'Failed to create droplet. Please try again.')
 
 def get_droplet_info(droplet_id):
     droplet_info_url = f"{DO_DROPLET_URL}/{droplet_id}"
@@ -147,34 +155,68 @@ def get_droplet_info(droplet_id):
     else:
         return None
 
-# Fungsi untuk menghapus droplet berdasarkan ID
+def request_droplet_name_for_delete(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, 'Enter droplet name to delete:')
+    bot.register_next_step_handler(message, delete_droplet_by_name)
+
+def delete_droplet_by_name(message):
+    chat_id = message.chat.id
+    droplet_name = message.text
+    droplet_id = get_droplet_id_by_name(droplet_name)
+    
+    if droplet_id:
+        if delete_droplet(droplet_id):
+            bot.send_message(chat_id, f"Droplet '{droplet_name}' has been deleted.")
+        else:
+            bot.send_message(chat_id, f"Failed to delete droplet '{droplet_name}'.")
+    else:
+        bot.send_message(chat_id, f"Droplet '{droplet_name}' not found.")
+
+def get_droplet_id_by_name(droplet_name):
+    headers = {
+        'Authorization': f'Bearer {DO_TOKEN}'
+    }
+    response = requests.get(DO_DROPLET_URL, headers=headers)
+    if response.status_code == 200:
+        droplets = response.json().get('droplets', [])
+        for droplet in droplets:
+            if droplet['name'] == droplet_name:
+                return droplet['id']
+    return None
+
 def delete_droplet(droplet_id):
     url = f'https://api.digitalocean.com/v2/droplets/{droplet_id}'
     headers = {'Authorization': f'Bearer {DO_TOKEN}'}
     response = requests.delete(url, headers=headers)
     return response.status_code == 204
 
-# Handler untuk menerima perintah /delete
-@bot.message_handler(commands=['delete'])
-def handle_delete_droplet(message):
+def list_droplets(message):
     chat_id = message.chat.id
-    if chat_id != ADMIN_CHAT_ID:
-        bot.send_message(chat_id, 'Anda tidak memiliki izin untuk menggunakan perintah ini.')
-        return
-    try:
-        # Memecah pesan untuk mendapatkan ID droplet
-        droplet_id = message.text.split()[1]
-        # Menghapus droplet dan memberikan balasan
-        if delete_droplet(droplet_id):
-            bot.reply_to(message, f"Droplet dengan ID {droplet_id} berhasil dihapus.")
+    headers = {
+        'Authorization': f'Bearer {DO_TOKEN}'
+    }
+    response = requests.get(DO_DROPLET_URL, headers=headers)
+    
+    if response.status_code == 200:
+        droplets = response.json().get('droplets', [])
+        if droplets:
+            respon = "DROPLET LIST:\n\n"
+            for droplet in droplets:
+                name = droplet['name']
+                droplet_id = droplet['id']
+                ip_address = next((net['ip_address'] for net in droplet['networks']['v4'] if net['type'] == 'public'), 'No public IP')
+                respon += f"Name: {name}\nID: {droplet_id}\nPublic IP: {ip_address}\n\n"
+            bot.send_message(chat_id, respon)
         else:
-            bot.reply_to(message, f"Droplet dengan ID {droplet_id} tidak ditemukan atau gagal dihapus.")
-    except IndexError:
-        bot.reply_to(message, "Format perintah salah. Gunakan /delete_droplet <DROPLET_ID>.")
+            bot.send_message(chat_id, "No droplets found.")
+    else:
+        bot.send_message(chat_id, "Error retrieving droplet list.")
 
-# Start bot polling
+# Start polling for Telegram bot
 bot.polling()
 
+        
 EOF
 
 # Buat file service systemd
