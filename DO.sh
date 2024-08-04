@@ -28,7 +28,7 @@ import time
 # Masukkan token bot telegram Anda di sini
 TOKEN = '7326202667:AAHShtcwXkt51IMU8tIdAF9zZanoTvDDZ9A'
 # Masukkan token API DigitalOcean Anda di sini
-DO_TOKEN = '{DO_TOKEN}'
+DO_TOKEN = '${DO_TOKEN}'
 
 # URL endpoint untuk membuat dan mengelola droplet di DigitalOcean
 DO_DROPLET_URL = 'https://api.digitalocean.com/v2/droplets'
