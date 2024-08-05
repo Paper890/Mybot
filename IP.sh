@@ -4,14 +4,6 @@ clear
 echo -e "•••• SETUP BOT ••••"
 read -p "Masukkan Token Github Anda: " GIT_TOKEN
 
-# Perbarui paket dan instal Python3-pip jika belum ada
-apt-get update
-apt-get install -y python3-pip
-
-# Instal modul Python yang diperlukan
-pip3 install requests
-pip3 install pyTelegramBotAPI
-
 cd
 # Buat direktori proyek
 mkdir -p /root/san/bot
