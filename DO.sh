@@ -62,6 +62,9 @@ def send_welcome(message):
         keyboard.add(InlineKeyboardButton("CREATE", callback_data="create"))
         keyboard.add(InlineKeyboardButton("DELETE", callback_data="delete"))
         keyboard.add(InlineKeyboardButton("LIST DROPLET", callback_data="list_droplet"))
+        keyboard.add(InlineKeyboardButton("POWER ON", callback_data="power"))
+        keyboard.add(InlineKeyboardButton("RESIZE", callback_data="resize"))
+        keyboard.add(InlineKeyboardButton("CEK LIMIT DROPLET", callback_data="cek_saldo"))
         bot.send_message(chat_id, "Welcome, Admin! Choose an option:", reply_markup=keyboard)
     else:
         bot.send_message(chat_id, "You are not authorized to use this bot.")
@@ -74,8 +77,16 @@ def callback_handler(call: CallbackQuery):
         request_droplet_name_for_delete(call.message)
     elif call.data == "list_droplet":
         list_droplets(call.message)
+    elif call.data == "power":
+        request_droplet_name_for_power(call.message)
+    elif call.data == "resize":
+        request_droplet_name_for_resize(call.message)
+    elif call.data == "cek_saldo":
+        cek_saldo_trial_droplet(call.message)
     elif call.data.startswith("size_"):
         handle_size_callback(call)
+    elif call.data.startswith("resize_"):
+        handle_resize_callback(call)
 
 def request_droplet_name(message):
     chat_id = message.chat.id
@@ -213,10 +224,96 @@ def list_droplets(message):
     else:
         bot.send_message(chat_id, "Error retrieving droplet list.")
 
-# Start polling for Telegram bot
-bot.polling()
+def request_droplet_name_for_power(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, 'Enter droplet name to power on/off:')
+    bot.register_next_step_handler(message, power_droplet)
 
+def power_droplet(message):
+    chat_id = message.chat.id
+    droplet_name = message.text
+    droplet_id = get_droplet_id_by_name(droplet_name)
+    
+    if droplet_id:
+        current_status = get_droplet_status(droplet_id)
+        if current_status == "active":
+            action = "power_off"
+        else:
+            action = "power_on"
+
+        if power_action_droplet(droplet_id, action):
+            bot.send_message(chat_id, f"Droplet '{droplet_name}' has been powered {'on' if action == 'power_on' else 'off'}.")
+        else:
+            bot.send_message(chat_id, f"Failed to perform power action on droplet '{droplet_name}'.")
+    else:
+        bot.send_message(chat_id, f"Droplet '{droplet_name}' not found.")
+
+def get_droplet_status(droplet_id):
+    droplet_info = get_droplet_info(droplet_id)
+    if droplet_info:
+        return droplet_info.get('status')
+    return None
+
+def power_action_droplet(droplet_id, action):
+    url = f'{DO_DROPLET_URL}/{droplet_id}/actions'
+    headers = {
+        'Authorization': f'Bearer {DO_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+    data = {'type': action}
+    response = requests.post(url, json=data, headers=headers)
+    return response.status_code == 201
+
+def request_droplet_name_for_resize(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, 'Enter droplet name to resize:')
+    bot.register_next_step_handler(message, resize_droplet)
+
+def resize_droplet(message):
+    chat_id = message.chat.id
+    droplet_name = message.text
+    user_data[chat_id] = {'name': droplet_name}
+    droplet_id = get_droplet_id_by_name(droplet_name)
+    
+    if droplet_id:
+        size_keyboard = InlineKeyboardMarkup(row_width=1)
+        for size_label, size_code in size_options.items():
+            button = InlineKeyboardButton(text=size_label, callback_data=f"resize_{size_code}")
+            size_keyboard.add(button)
         
+        bot.send_message(chat_id, 'Select new droplet size:', reply_markup=size_keyboard)
+    else:
+        bot.send_message(chat_id, f"Droplet '{droplet_name}' not found.")
+
+def handle_resize_callback(call: CallbackQuery):
+    chat_id = call.message.chat.id
+    size_code = call.data.split('_')[1]
+    droplet_name = user_data.get(chat_id, {}).get('name')
+    droplet_id = get_droplet_id_by_name(droplet_name)
+    
+    if droplet_id:
+        if resize_droplet_action(droplet_id, size_code):
+            bot.send_message(chat_id, f"Droplet '{droplet_name}' has been resized to {size_code}.")
+        else:
+            bot.send_message(chat_id, f"Failed to resize droplet '{droplet_name}'.")
+    else:
+        bot.send_message(chat_id, 'Error occurred. Please start again.')
+
+def resize_droplet_action(droplet_id, size_code):
+    url = f'{DO_DROPLET_URL}/{droplet_id}/actions'
+    headers = {
+        'Authorization': f'Bearer {DO_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'type': 'resize',
+        'size': size_code
+    }
+    response = requests.post(url, json=data, headers=headers)
+    return response.status_code == 201
+        
+# Start polling for Telegram bot
+bot.polling()  
 EOF
 
 # Buat file service systemd
