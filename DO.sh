@@ -337,7 +337,7 @@ systemctl daemon-reload
 systemctl enable do
 systemctl start do
 
-echo "Autobackup Berhasil Di install" 
+echo "Berhasil Di install" 
 
 cd
 rm DO.sh
