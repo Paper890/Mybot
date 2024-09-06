@@ -261,7 +261,7 @@ def callback_query(call):
     elif call.data == "cairkan_reward":
         saldo, reward = get_user(call.message.chat.id)
         if reward > 0:
-            bot.send_message(call.message.chat.id, f"Permintaan pencairan reward sebesar {reward} telah dikirim ke admin. Silahkan Kirim No DANA/GOPAY Kamu ke Admin @Sanmaxx")
+            bot.send_message(call.message.chat.id, f"Permintaan pencairan reward sebesar {reward} telah dikirim ke admin. Pastikan Kamu Telah Mengisi Rekening Reward")
             bot.send_message(ADMIN_CHAT_ID, f"Permintaan pencairan reward:\nChat ID: `{call.message.chat.id}`\nNominal: `{reward}`", parse_mode="Markdown")
         else:
             bot.send_message(call.message.chat.id, "Reward Anda saat ini adalah 0. Tidak ada yang bisa dicairkan.")
@@ -271,13 +271,27 @@ def callback_query(call):
         data = cursor.fetchone()
         
         if data:
-            # Jika data sudah ada, tampilkan datanya
-            response = f"Data Rekening Anda:\n\nNama: {data[0]}\nNo Rekening DANA/GOPAY : {data[1]}"
-            bot.send_message(call.message.chat.id, response)
+            # Jika data sudah ada, tampilkan datanya dengan opsi edit
+            response = f"Data Rekening Anda:\n\nNama: {data[0]}\nNo Rekening: {data[1]}\n\n"
+            response += "Klik tombol di bawah jika ingin mengedit data rekening Anda."
+            
+            markup = InlineKeyboardMarkup()
+            markup.row_width = 3
+            markup.add(InlineKeyboardButton("EDIT NAMA", callback_data="edit_nama"),
+                       InlineKeyboardButton("EDIT NOMOR REK", callback_data="edit_rekening"))
+            
+            bot.send_message(call.message.chat.id, response, reply_markup=markup)
         else:
             # Jika data belum ada, mulai proses input rekening
             msg = bot.send_message(call.message.chat.id, 'Masukkan nama pemilik rekening:')
             bot.register_next_step_handler(msg, get_nama)
+
+    elif call.data == 'edit_nama':
+        msg = bot.send_message(call.message.chat.id, 'Masukkan nama baru:')
+        bot.register_next_step_handler(msg, update_nama)
+    elif call.data == 'edit_rekening':
+        msg = bot.send_message(call.message.chat.id, 'Masukkan nomor rekening baru:')
+        bot.register_next_step_handler(msg, update_rekening)
   
     elif call.data == "add_text":
         if str(call.message.chat.id) == ADMIN_CHAT_ID:
@@ -523,6 +537,26 @@ def lihat_data_rekening(message):
             bot.send_message(message.chat.id, f"Terjadi kesalahan: {str(e)}")
     else:
         bot.send_message(message.chat.id, 'Anda tidak memiliki izin untuk melihat data ini.')
+
+# Fungsi untuk mengupdate nama pelanggan
+def update_nama(message):
+    nama_baru = message.text
+    
+    # Update nama di database
+    cursor.execute('UPDATE pelanggan SET nama = ? WHERE chat_id = ?', (nama_baru, message.chat.id))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, 'Nama rekening Anda telah diperbarui!')
+
+# Fungsi untuk mengupdate nomor rekening pelanggan
+def update_rekening(message):
+    nomor_rekening_baru = message.text
+    
+    # Update nomor rekening di database
+    cursor.execute('UPDATE pelanggan SET nomor_rekening = ? WHERE chat_id = ?', (nomor_rekening_baru, message.chat.id))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, 'Nomor rekening Anda telah diperbarui!')
 
 # Start polling
 bot.polling()
