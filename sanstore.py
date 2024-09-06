@@ -402,7 +402,7 @@ def acc_cairkan_reward(message):
         conn.commit()
 
         bot.send_message(message.chat.id, f"Permintaan pencairan reward untuk Chat ID {chat_id} telah disetujui.")
-        bot.send_message(chat_id, "Permintaan Pencairan Reward Telah Di terima Silahkan kirim No Dana/Gopay/Seabank/ShopeePay ke Admin @Sanmaxx")
+        bot.send_message(chat_id, "Permintaan Pencairan Reward Telah Dikirim Ke Rekening mu")
     except (ValueError, IndexError):
         bot.send_message(message.chat.id, "Format tidak valid. Pastikan Anda memasukkan Chat ID yang benar.")
         
