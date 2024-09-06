@@ -310,7 +310,7 @@ def process_topup(message):
         user_data[chat_id] = {'nominal': nominal}
 
         # Meminta pengguna untuk mengirimkan foto bukti transfer
-        bot.send_message(chat_id, f"Anda ingin top up sebesar Rp{nominal:,}. Silakan kirimkan foto bukti transfer Anda.")
+        bot.send_message(chat_id, f"Anda ingin top up sebesar Rp{nominal:,}\n Silahkan Lakukan Pembayaran Ke DANA/GOPAY : 082292615651\nAtau Melalui Qris : https://tinyurl.com/SanQris\n\nKirim Bukti Screenshot Transfer Disini Jika selesai")
         bot.register_next_step_handler_by_chat_id(chat_id, process_transfer_proof)
     except ValueError:
         bot.send_message(message.chat.id, "Nominal tidak valid. Silakan masukkan angka yang benar.")
@@ -337,7 +337,7 @@ def process_transfer_proof(message):
         bot.send_message(chat_id, "Permintaan top up Anda telah dikirim dan sedang diproses.")
 
     else:
-        bot.send_message(chat_id, "Silahkan Lakukan Pembayaran Ke DANA/GOPAY : 082292615651\nAtau Melalui Qris : https://tinyurl.com/SanQris\n\nKirim Bukti Screenshot Transfer Disini Jika selesai")
+        bot.send_message(chat_id, "Silakan kirimkan foto bukti transfer")
         bot.register_next_step_handler_by_chat_id(chat_id, process_transfer_proof)
         
 # Process adding balance by admin
