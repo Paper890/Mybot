@@ -27,6 +27,14 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS users
                   (chat_id INTEGER PRIMARY KEY, saldo INTEGER DEFAULT 0, reward INTEGER DEFAULT 0, referrer_id INTEGER)''')
 cursor.execute('''CREATE TABLE IF NOT EXISTS prices
                   (id INTEGER PRIMARY KEY, date TEXT, harga_1 INTEGER, harga_2 INTEGER)''')
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS pelanggan (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER UNIQUE,
+    nama TEXT,
+    nomor_rekening TEXT
+)
+''')
 conn.commit()
 
 # Function to create a zip backup of the database
@@ -114,6 +122,7 @@ def send_welcome(message):
     markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
                InlineKeyboardButton("TEMAN", callback_data="teman"))
     markup.add(InlineKeyboardButton("CAIRKAN REWARD", callback_data="cairkan_reward"))
+    markup.add(InlineKeyboardButton("REKENING REWARD", callback_data="rek_reward"))
 
     # Only show "LIST REWARD", "ADD BALANCE", and "ADD TEXT TO FILE" to the admin
     if str(message.chat.id) == ADMIN_CHAT_ID:
@@ -256,6 +265,20 @@ def callback_query(call):
             bot.send_message(ADMIN_CHAT_ID, f"Permintaan pencairan reward:\nChat ID: `{call.message.chat.id}`\nNominal: `{reward}`", parse_mode="Markdown")
         else:
             bot.send_message(call.message.chat.id, "Reward Anda saat ini adalah 0. Tidak ada yang bisa dicairkan.")
+    elif call.data == 'rek_reward':
+        # Periksa apakah user sudah punya data rekening
+        cursor.execute('SELECT nama, nomor_rekening FROM pelanggan WHERE chat_id = ?', (call.message.chat.id,))
+        data = cursor.fetchone()
+        
+        if data:
+            # Jika data sudah ada, tampilkan datanya
+            response = f"Data Rekening Anda:\n\nNama: {data[0]}\nNo Rekening DANA/GOPAY : {data[1]}"
+            bot.send_message(call.message.chat.id, response)
+        else:
+            # Jika data belum ada, mulai proses input rekening
+            msg = bot.send_message(call.message.chat.id, 'Masukkan nama pemilik rekening:')
+            bot.register_next_step_handler(msg, get_nama)
+  
     elif call.data == "add_text":
         if str(call.message.chat.id) == ADMIN_CHAT_ID:
             bot.send_message(call.message.chat.id, "Masukkan nama file (misal: ssh.txt) dan teks yang ingin Anda masukkan ke dalam file, dipisahkan oleh tanda '|'. Contoh: ssh.txt|Ini adalah teks.")
@@ -456,6 +479,50 @@ def handle_payment(message):
         bot.send_message(message.chat.id, "Anda belum memasukkan nomor yang akan diisi. Silakan mulai lagi dengan /start.")
             
 
+# Fungsi untuk mendapatkan nama dari pengguna
+def get_nama(message):
+    nama = message.text
+    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening. Nomor DANA/GOPAY:')
+    bot.register_next_step_handler(msg, get_nomor_rekening, nama)
+
+# Fungsi untuk mendapatkan nomor rekening dan menyimpan ke database
+def get_nomor_rekening(message, nama):
+    nomor_rekening = message.text
+
+    # Simpan atau update data ke SQLite
+    cursor.execute('INSERT OR REPLACE INTO pelanggan (chat_id, nama, nomor_rekening) VALUES (?, ?, ?)', 
+                   (message.chat.id, nama, nomor_rekening))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, 'Data rekening Anda telah disimpan!')
+
+# Fungsi untuk menampilkan data rekening kepada admin secara perorangan
+@bot.message_handler(commands=['lihat_data'])
+def lihat_data_rekening(message):
+    if str(message.chat.id) == ADMIN_CHAT_ID:
+        try:
+            # Mengambil ChatID dari perintah /lihat_data {ChatID}
+            command_parts = message.text.split()
+            if len(command_parts) != 2:
+                bot.send_message(message.chat.id, 'Gunakan format: /lihat_data {ChatID}')
+                return
+            
+            target_chat_id = command_parts[1]
+            
+            # Ambil data rekening dari database berdasarkan ChatID yang diberikan
+            cursor.execute('SELECT nama, nomor_rekening FROM pelanggan WHERE chat_id = ?', (target_chat_id,))
+            data = cursor.fetchone()
+            
+            if data:
+                response = f"Data Rekening Pelanggan (ChatID: {target_chat_id}):\n\nNama: {data[0]}\nNo Rekening: {data[1]}"
+                bot.send_message(message.chat.id, response)
+            else:
+                bot.send_message(message.chat.id, f"Tidak ada data rekening untuk ChatID: {target_chat_id}")
+        
+        except Exception as e:
+            bot.send_message(message.chat.id, f"Terjadi kesalahan: {str(e)}")
+    else:
+        bot.send_message(message.chat.id, 'Anda tidak memiliki izin untuk melihat data ini.')
 
 # Start polling
 bot.polling()
