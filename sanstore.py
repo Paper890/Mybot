@@ -133,7 +133,7 @@ def send_welcome(message):
     # Send the welcome message with prices
     bot.send_message(
         message.chat.id, 
-        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-31 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅\nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
+        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-31 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅ \nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
         reply_markup=markup
     )
 
