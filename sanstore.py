@@ -86,8 +86,8 @@ def handle_zip_file(message):
         bot.send_message(ADMIN_CHAT_ID, "Database berhasil dipulihkan dari backup.")
 
 # Initial prices
-INITIAL_HARGA_1 = 3000
-INITIAL_HARGA_2 = 7000
+INITIAL_HARGA_1 = 5000
+INITIAL_HARGA_2 = 10000
 
 # Function to calculate daily price based on the current date
 def get_daily_prices():
@@ -98,8 +98,8 @@ def get_daily_prices():
     days_passed = (today - start_of_month).days
 
     # Calculate the prices
-    harga_1 = max(INITIAL_HARGA_1 - (100 * days_passed), 0)
-    harga_2 = max(INITIAL_HARGA_2 - (150 * days_passed), 0)
+    harga_1 = max(INITIAL_HARGA_1 - (166 * days_passed), 0)
+    harga_2 = max(INITIAL_HARGA_2 - (166 * days_passed), 0)
 
     return harga_1, harga_2
 
@@ -304,8 +304,8 @@ def handle_vpn_choice(call):
     markup.row_width = 2
     vpn_type = call.data.upper()
     markup.add(
-        InlineKeyboardButton("1 HP", callback_data=f"1hp_{call.data}"),
-        InlineKeyboardButton("1 STB", callback_data=f"1stb_{call.data}")
+        InlineKeyboardButton("1 BULAN", callback_data=f"1hp_{call.data}"),
+        InlineKeyboardButton("2 BULAN", callback_data=f"1stb_{call.data}")
     )
     bot.send_message(call.message.chat.id, "Silahkan Pilih Jenis VPN", reply_markup=markup)
 
