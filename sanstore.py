@@ -86,8 +86,8 @@ def handle_zip_file(message):
         bot.send_message(ADMIN_CHAT_ID, "Database berhasil dipulihkan dari backup.")
 
 # Initial prices
-INITIAL_HARGA_1 = 5000
-INITIAL_HARGA_2 = 10000
+INITIAL_HARGA_1 = 8000
+INITIAL_HARGA_2 = 14000
 
 # Function to calculate daily price based on the current date
 def get_daily_prices():
@@ -304,8 +304,8 @@ def handle_vpn_choice(call):
     markup.row_width = 2
     vpn_type = call.data.upper()
     markup.add(
-        InlineKeyboardButton("1 BULAN", callback_data=f"1hp_{call.data}"),
-        InlineKeyboardButton("2 BULAN", callback_data=f"1stb_{call.data}")
+        InlineKeyboardButton("HP 2 BULAN", callback_data=f"1hp_{call.data}"),
+        InlineKeyboardButton("STB 2 BULAN", callback_data=f"1stb_{call.data}")
     )
     bot.send_message(call.message.chat.id, "Pilih Masa Aktif Yang Diinginkan :", reply_markup=markup)
 
