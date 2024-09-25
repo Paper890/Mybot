@@ -133,7 +133,7 @@ def send_welcome(message):
     # Send the welcome message with prices
     bot.send_message(
         message.chat.id, 
-        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-31 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅ \nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
+        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-60 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅ \nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
         reply_markup=markup
     )
 
@@ -307,7 +307,7 @@ def handle_vpn_choice(call):
         InlineKeyboardButton("1 BULAN", callback_data=f"1hp_{call.data}"),
         InlineKeyboardButton("2 BULAN", callback_data=f"1stb_{call.data}")
     )
-    bot.send_message(call.message.chat.id, "Silahkan Pilih Jenis VPN", reply_markup=markup)
+    bot.send_message(call.message.chat.id, "Pilih Masa Aktif Yang Diinginkan :", reply_markup=markup)
 
 # Function to handle VPN purchase
 def handle_vpn_purchase(call):
@@ -394,7 +394,7 @@ def process_add_balance(message):
             cursor.execute("SELECT referrer_id FROM users WHERE chat_id = ?", (chat_id,))
             referrer_id = cursor.fetchone()[0]
             if referrer_id:
-                reward_amount = int(amount * 0.2)
+                reward_amount = int(amount * 0.1) 
                 cursor.execute("UPDATE users SET reward = reward + ? WHERE chat_id = ?", (reward_amount, referrer_id))
                 conn.commit()
                 bot.send_message(referrer_id, f"Anda menerima reward sebesar {reward_amount} dari top up teman Anda. Reward saat ini: {reward_amount}")
