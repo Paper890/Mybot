@@ -375,7 +375,7 @@ def acc_cairkan_reward(message):
 # Fungsi untuk mendapatkan nama dari pengguna
 def get_nama(message):
     nama = message.text
-    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening. Nomor DANA/GOPAY:')
+    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening, Sertakan Nama Bank/Dompet dengan tanda pisah |. Contoh : 082292615651 | DANA')
     bot.register_next_step_handler(msg, get_nomor_rekening, nama)
 
 # Fungsi untuk mendapatkan nomor rekening dan menyimpan ke database
