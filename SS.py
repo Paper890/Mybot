@@ -8,7 +8,7 @@ from datetime import datetime
 import shutil
 #----BOT INISIAL---#
 # Initialize bot with your bot token
-API_TOKEN = '7360190308:AAFCXEy6tEzRvCgzF44XzlcX3PRNV-vPkxo'
+API_TOKEN = '7500003101:AAHipbo4mytY-EPrTEcdz0rjKwyV_-v8iPI'
 ADMIN_CHAT_ID = '576495165'  # Replace with the actual admin ChatID
 bot = telebot.TeleBot(API_TOKEN)
 
