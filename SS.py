@@ -118,7 +118,6 @@ def send_welcome(message):
     markup.add(InlineKeyboardButton("SSH", callback_data="ssh"),
                InlineKeyboardButton("VMESS", callback_data="vmess"),
                InlineKeyboardButton("TROJAN", callback_data="trojan"))
-    markup.add(InlineKeyboardButton("AKRAB", callback_data="akrab_button"))      
     markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
                InlineKeyboardButton("TEMAN", callback_data="teman"))
     markup.add(InlineKeyboardButton("CAIRKAN REWARD", callback_data="cairkan_reward"))
@@ -153,78 +152,7 @@ def callback_query(call):
     if call.data in ["ssh", "vmess", "trojan"]:
         handle_vpn_choice(call)
     elif call.data in ["1hp_ssh", "1stb_ssh", "1hp_vmess", "1stb_vmess", "1hp_trojan", "1stb_trojan"]:
-        handle_vpn_purchase(call)
-    elif call.data == "akrab_button":
-        # Create the inline keyboard markup
-        markup = InlineKeyboardMarkup()
-        markup.row_width = 3
-        markup.add(InlineKeyboardButton("MINI", callback_data="MINI"),
-                   InlineKeyboardButton("BIG", callback_data="BIG"),
-                   InlineKeyboardButton("JUMBO", callback_data="JUMBO"))
-
-        # Send the AKRAB package information message
-        sent_message = bot.send_message(
-            call.message.chat.id,
-            "💸 PAKET AKRAB RESMI (OFFICIAL) 💸\n\n"
-            "🔥 AKRAB MINI\n"
-            "Area 1 = 21GB\n"
-            "Area 2 = 24GB\n"
-            "Area 3 = 35GB\n"
-            "Area 4 = 59GB\n\n"
-            "Harga  : 60.000\n\n"
-            "🔥 AKRAB REWARD (Big)\n"
-            "Area 1 : 33,5-36,5 GB\n"
-            "Area 2 : 36,5-39,5 GB\n"
-            "Area 3 : 47-50 GB\n"
-            "Area 4 : 71-74 GB\n\n"
-            "Harga Reseller : 70.000\n\n"
-            "🔥 AKRAB XXL REWARD (Jumbo)\n"
-            "Area 1 : 65,5-67,5 GB\n"
-            "Area 2 : 70-72 GB\n"
-            "Area 3 : 83-85 GB\n"
-            "Area 4 : 123-125 GB\n\n"
-            "Harga : 85.000",
-            reply_markup=markup
-        )    
-
-       # Store message_id in user_data for potential future edits
-        user_data[call.message.chat.id] = {'message_id': sent_message.message_id}
-            
-    elif call.data in ["MINI", "BIG", "JUMBO"]:
-        user_data[call.message.chat.id]['quota_type'] = call.data
-    
-    # Menghilangkan tombol dan mengubah pesan
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=user_data[call.message.chat.id]['message_id'],
-            text=f"Process Order {call.data}."
-        )
-        bot.send_message(call.message.chat.id, "Nomor XL/Axis Kamu :")
-    
-    # Menyimpan data tambahan
-        bot.register_next_step_handler(call.message, ask_for_number)      
-        
-    elif call.data.startswith("process_") or call.data.startswith("complete_"):     
-         data_parts = call.data.split('_')
-         chat_id = int(data_parts[1])
-         message_id = int(data_parts[2])
-
-         if call.data.startswith("process_"):
-             bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} sedang DIPROSES.")
-             bot.send_message(chat_id, "Transaksi Anda sedang diproses.")
-    
-         elif call.data.startswith("complete_"):
-             bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} telah SELESAI.")
-             bot.send_message(chat_id, "Transaksi Anda telah selesai. Terima kasih!")
-        
-             # Menghapus pesan yang sudah SELESAI dari admin
-             if 'admin_message_id' in user_data[chat_id]:
-                 try:
-                     bot.delete_message(ADMIN_CHAT_ID, user_data[chat_id]['admin_message_id'])
-                 except telebot.apihelper.ApiException as e:
-                     print(f"Error deleting message: {e}")
-                 del user_data[chat_id]['admin_message_id']
-            
+        handle_vpn_purchase(call)            
     elif call.data == 'topup':
         bot.answer_callback_query(call.id, "Masukkan jumlah nominal top up:")
         bot.send_message(call.message.chat.id, "Silakan masukkan nominal yang ingin Anda top up:")
@@ -443,55 +371,6 @@ def acc_cairkan_reward(message):
     except (ValueError, IndexError):
         bot.send_message(message.chat.id, "Format tidak valid. Pastikan Anda memasukkan Chat ID yang benar.")
         
-# Fungsi untuk meminta nomor yang akan diisi
-def ask_for_number(message):
-    user_data[message.chat.id]['number'] = message.text
-    bot.send_message(message.chat.id, "Silahkan Lakukan Pembayaran Ke DANA/GOPAY : 082292615651\nAtau Melalui Qris : https://tinyurl.com/SanQris\n\nKirim Bukti Screenshot Transfer Jika selesai Dan Pesananmu Akan Diteruskan Ke Admin")
-
-# Callback handler untuk admin yang memproses transaksi
-@bot.callback_query_handler(func=lambda call: call.data.startswith("process_") or call.data.startswith("complete_"))
-def handle_admin_action(call):
-    data_parts = call.data.split('_')
-    chat_id = int(data_parts[1])
-    message_id = int(data_parts[2])
-
-    if call.data.startswith("process_"):
-        bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} sedang DIPROSES.")
-        bot.send_message(chat_id, "Transaksi Anda sedang diproses.")
-    
-    elif call.data.startswith("complete_"):
-        bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} telah SELESAI.")
-        bot.send_message(chat_id, "Transaksi Anda telah selesai. Terima kasih!")
-        
-        # Menghapus pesan yang sudah SELESAI dari admin
-        if 'admin_message_id' in user_data[chat_id]:
-            try:
-                bot.delete_message(ADMIN_CHAT_ID, user_data[chat_id]['admin_message_id'])
-            except telebot.apihelper.ApiException as e:
-                print(f"Error deleting message: {e}")
-            del user_data[chat_id]['admin_message_id']
-            
- # Handler untuk menerima bukti pembayaran
-@bot.message_handler(content_types=['photo'])
-def handle_payment(message):
-    if message.chat.id in user_data and 'number' in user_data[message.chat.id]:
-        photo_id = message.photo[-1].file_id
-        user_data[message.chat.id]['payment_proof'] = photo_id
-        
-        # Notifikasi ke admin
-        markup = InlineKeyboardMarkup()
-        markup.row_width = 3
-        markup.add(InlineKeyboardButton("DIPROSES", callback_data=f"process_{message.chat.id}_{message.message_id}"),
-                   InlineKeyboardButton("SELESAI", callback_data=f"complete_{message.chat.id}_{message.message_id}"))
-
-        sent_message = bot.send_photo(ADMIN_CHAT_ID, photo_id, caption=f"Transaksi baru:\nKuota: {user_data[message.chat.id]['quota_type']}\nNomor: {user_data[message.chat.id]['number']}", reply_markup=markup)
-        # Menyimpan ID pesan untuk pengeditan di kemudian hari
-        user_data[message.chat.id]['admin_message_id'] = sent_message.message_id
-
-        bot.send_message(message.chat.id, "Terima kasih! Pembayaran Anda telah diterima dan akan segera diproses.")
-    else:
-        bot.send_message(message.chat.id, "Anda belum memasukkan nomor yang akan diisi. Silakan mulai lagi dengan /start.")
-            
 
 # Fungsi untuk mendapatkan nama dari pengguna
 def get_nama(message):
