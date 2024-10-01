@@ -130,7 +130,7 @@ def send_welcome(message):
 
     markup = InlineKeyboardMarkup()
     markup.row_width = 3
-    markup.add(InlineKeyboardButton("MENU VPN", callback_data="menu_vpn"))
+    markup.add(InlineKeyboardButton("MENU ORDER VPN", callback_data="menu_vpn"))
     markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
                InlineKeyboardButton("MENU REFERALL", callback_data="menu_referral"))
     
