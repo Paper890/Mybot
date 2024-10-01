@@ -6,13 +6,15 @@ import zipfile
 import threading
 from datetime import datetime
 import shutil
-#----BOT INISIAL---#
+
+
+#=================== DATA BOT ===============
 # Initialize bot with your bot token
 API_TOKEN = '7500003101:AAHipbo4mytY-EPrTEcdz0rjKwyV_-v8iPI'
 ADMIN_CHAT_ID = '576495165'  # Replace with the actual admin ChatID
 bot = telebot.TeleBot(API_TOKEN)
 
-# Database paths
+#=================== DATA BASE ================
 DB_PATH = 'san_store.db'
 BACKUP_DIR = 'backups'
 
@@ -37,7 +39,19 @@ CREATE TABLE IF NOT EXISTS pelanggan (
 ''')
 conn.commit()
 
-# Function to create a zip backup of the database
+#================= DATA BASE CONNECTION =============
+# Function to get user info from the database
+def get_user(chat_id):
+    cursor.execute("SELECT saldo, reward FROM users WHERE chat_id=?", (chat_id,))
+    return cursor.fetchone()
+
+# Function to create or update a user in the database
+def create_or_update_user(chat_id, referrer_id=None):
+    cursor.execute("INSERT OR IGNORE INTO users (chat_id, referrer_id) VALUES (?, ?)", (chat_id, referrer_id))
+    conn.commit()
+
+
+#================== BACKUP & RESTORE ===============
 def backup_database():
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR)
@@ -85,9 +99,10 @@ def handle_zip_file(message):
         restore_database(zip_filename)
         bot.send_message(ADMIN_CHAT_ID, "Database berhasil dipulihkan dari backup.")
 
-# Initial prices
-INITIAL_HARGA_1 = 8000
-INITIAL_HARGA_2 = 14000
+
+#=============== FUNGSI HARGA ==========
+INITIAL_HARGA_1 = 10000
+INITIAL_HARGA_2 = 15000
 
 # Function to calculate daily price based on the current date
 def get_daily_prices():
@@ -99,11 +114,11 @@ def get_daily_prices():
 
     # Calculate the prices
     harga_1 = max(INITIAL_HARGA_1 - (166 * days_passed), 0)
-    harga_2 = max(INITIAL_HARGA_2 - (166 * days_passed), 0)
+    harga_2 = max(INITIAL_HARGA_2 - (250 * days_passed), 0)
 
     return harga_1, harga_2
 
-# Start command handler
+#================== MENU UTAMA ==============
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     referrer_id = message.text.split()[1] if len(message.text.split()) > 1 else None
@@ -115,51 +130,79 @@ def send_welcome(message):
 
     markup = InlineKeyboardMarkup()
     markup.row_width = 3
-    markup.add(InlineKeyboardButton("SSH", callback_data="ssh"),
-               InlineKeyboardButton("VMESS", callback_data="vmess"),
-               InlineKeyboardButton("TROJAN", callback_data="trojan"))
+    markup.add(InlineKeyboardButton("MENU VPN", callback_data="menu_vpn"))
     markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
-               InlineKeyboardButton("TEMAN", callback_data="teman"))
-    markup.add(InlineKeyboardButton("CAIRKAN REWARD", callback_data="cairkan_reward"))
-    markup.add(InlineKeyboardButton("REKENING REWARD", callback_data="rek_reward"))
-
-    # Only show "LIST REWARD", "ADD BALANCE", and "ADD TEXT TO FILE" to the admin
+               InlineKeyboardButton("MENU REFERALL", callback_data="menu_referral"))
+    
     if str(message.chat.id) == ADMIN_CHAT_ID:
         markup.add(InlineKeyboardButton("LIST REWARD", callback_data="list_reward"),
                    InlineKeyboardButton("ADD BALANCE", callback_data="add_balance"))
         markup.add(InlineKeyboardButton("ADD TEXT TO FILE", callback_data="add_text"))
+        markup.add(InlineKeyboardButton("📣BROADCAST📣", callback_data="informasi"))
+
 
     # Send the welcome message with prices
     bot.send_message(
         message.chat.id, 
-        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-60 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅ \nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
+        f"💎 𝙎𝘼𝙉𝙎𝙏𝙊𝙍𝙀 𝘽𝙊𝙏 💎\n\n"
+        f"𝙍𝙚𝙖𝙙𝙮 𝙑𝙋𝙉 𝙎𝙝𝙖𝙧𝙞𝙣𝙜 𝘽𝙚𝙧𝙠𝙪𝙖𝙡𝙞𝙩𝙖𝙨 𝘿𝙖𝙣 𝘽𝙚𝙧𝙜𝙖𝙧𝙖𝙣𝙨𝙞\n"
+        f"𝙍𝙚𝙜𝙞𝙤𝙣 𝙑𝙋𝙉  : 𝙎𝙞𝙣𝙜𝙖𝙥𝙪𝙧𝙖\n"
+        f"𝙅𝙚𝙣𝙞𝙨 𝙑𝙋𝙉     : 𝙎𝙃𝘼𝙍𝙄𝙉𝙂\n"
+        f"𝙈𝙖𝙨𝙖 𝙖𝙠𝙩𝙞𝙛     : 1 - 2 𝘽𝙪𝙡𝙖𝙣\n\n"
+        f"𝙃𝙖𝙧𝙜𝙖 𝙎𝙚𝙠𝙖𝙧𝙖𝙣𝙜\n"
+        f"2 𝙄𝙋 / 𝙎𝙏𝘽 : 𝙍𝙥{harga_1}\n"
+        f"5 𝙄𝙋 / 𝙎𝙏𝘽 : 𝙍𝙥{harga_2}\n\n"
+        f"𝙎𝙄𝙨𝙖 𝙎𝙖𝙡𝙙𝙤 𝙆𝙖𝙢𝙪 : 𝙍𝙥{saldo}\n"
+        f"𝙍𝙚𝙬𝙖𝙧𝙙 𝙍𝙚𝙛𝙛𝙚𝙧𝙖𝙡 : 𝙍𝙥{reward}",
         reply_markup=markup
     )
 
-# Function to get user info from the database
-def get_user(chat_id):
-    cursor.execute("SELECT saldo, reward FROM users WHERE chat_id=?", (chat_id,))
-    return cursor.fetchone()
-
-# Function to create or update a user in the database
-def create_or_update_user(chat_id, referrer_id=None):
-    cursor.execute("INSERT OR IGNORE INTO users (chat_id, referrer_id) VALUES (?, ?)", (chat_id, referrer_id))
-    conn.commit()
-
-# Callback query handler for InlineKeyboardButton actions
+#===================== QALBACK QUERRY ===============
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
-    if call.data in ["ssh", "vmess", "trojan"]:
+    if call.data == "menu_vpn":
+        vpn_markup = InlineKeyboardMarkup()
+        vpn_markup.row_width = 3
+        vpn_markup.add(InlineKeyboardButton("SSH", callback_data="ssh"),
+                       InlineKeyboardButton("VMESS", callback_data="vmess"),
+                       InlineKeyboardButton("TROJAN", callback_data="trojan"))
+    
+        bot.edit_message_text(
+            chat_id=call.message.chat.id, 
+            message_id=call.message.message_id,
+            text="𝙋𝙞𝙡𝙞𝙝 𝙊𝙥𝙨𝙞 𝙐𝙣𝙩𝙪𝙠 𝙈𝙚𝙡𝙖𝙣𝙟𝙪𝙩𝙠𝙖𝙣 . . .",
+            reply_markup=vpn_markup
+        )
+                  
+    elif call.data in ["ssh", "vmess", "trojan"]:
         handle_vpn_choice(call)
     elif call.data in ["1hp_ssh", "1stb_ssh", "1hp_vmess", "1stb_vmess", "1hp_trojan", "1stb_trojan"]:
-        handle_vpn_purchase(call)            
+        handle_vpn_purchase(call)    
     elif call.data == 'topup':
         bot.answer_callback_query(call.id, "Masukkan jumlah nominal top up:")
-        bot.send_message(call.message.chat.id, "Silakan masukkan nominal yang ingin Anda top up:")
+        bot.send_message(call.message.chat.id, "𝙉𝙤𝙢𝙞𝙣𝙖𝙡 𝙏𝙤𝙥 𝙐𝙥")
         bot.register_next_step_handler_by_chat_id(call.message.chat.id, process_topup)
+        
+        
+    elif call.data == "menu_referral":
+        referral_markup = InlineKeyboardMarkup()
+        referral_markup.row_width = 2
+        referral_markup.add(InlineKeyboardButton("LINK REFERAL", callback_data="teman"),
+                            InlineKeyboardButton("CAIRKAN REWARD", callback_data="cairkan_reward"),
+                            InlineKeyboardButton("REKENING REWARD", callback_data="rek_reward"))
+                            
+        bot.edit_message_text(
+            chat_id=call.message.chat.id, 
+            message_id=call.message.message_id,
+            text="𝙋𝙞𝙡𝙞𝙝 𝙊𝙥𝙨𝙞 𝙐𝙣𝙩𝙪𝙠 𝙈𝙚𝙡𝙖𝙣𝙟𝙪𝙩𝙠𝙖𝙣 . . .",
+            reply_markup=referral_markup
+        )
+    
     elif call.data == "teman":
-        ref_link = f"https://t.me/sanstore_bot?start={call.message.chat.id}"
-        bot.send_message(call.message.chat.id, f"Berikut Adalah link Referall Anda:\n{ref_link}\nAnda akan menerima 20% dari setiap top up yang dilakukan oleh teman yang Anda undang!.\n\nPencairan Reward Dilakukan Setiap Akhir bulan")
+        bot_info = bot.get_me()
+        ref_link = f"https://t.me/{bot_info.username}?start={call.message.chat.id}"
+    
+        bot.send_message(call.message.chat.id, f"Berikut Adalah link Referall Anda:\n{ref_link}\nDapatkan Reward Dengan Mengundang Teman Kamu")
         
         # Show list of invited friends
         cursor.execute("SELECT chat_id FROM users WHERE referrer_id = ?", (call.message.chat.id,))
@@ -184,7 +227,11 @@ def callback_query(call):
                 bot.send_message(call.message.chat.id, "Belum ada pengguna dengan reward.")
     elif call.data == "add_balance":
         if str(call.message.chat.id) == ADMIN_CHAT_ID:
-            bot.send_message(call.message.chat.id, "Masukkan Chat ID pengguna yang ingin Anda tambahkan saldo, diikuti oleh jumlah saldo yang ingin ditambahkan, dipisahkan dengan spasi. Contoh: 123456789 50000")
+            bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=f"Masukkan ChatID<Spasi>Jumlah"
+            )
             bot.register_next_step_handler(call.message, process_add_balance)
     elif call.data == "cairkan_reward":
         saldo, reward = get_user(call.message.chat.id)
@@ -225,17 +272,30 @@ def callback_query(call):
         if str(call.message.chat.id) == ADMIN_CHAT_ID:
             bot.send_message(call.message.chat.id, "Masukkan nama file (misal: ssh.txt) dan teks yang ingin Anda masukkan ke dalam file, dipisahkan oleh tanda '|'. Contoh: ssh.txt|Ini adalah teks.")
             bot.register_next_step_handler(call.message, process_add_text)
+            
+    elif call.data == "informasi":
+        if str(call.message.chat.id) == ADMIN_CHAT_ID:
+            msg = bot.send_message(call.message.chat.id, "𝙄𝙨𝙞 𝘽𝙧𝙤𝙖𝙙𝙘𝙖𝙨𝙩📢")
+            bot.register_next_step_handler(msg, send_broadcast_message)
+        
 
+#==================== FITUR HANDLE VPN  ================
 # Function to handle VPN choice
 def handle_vpn_choice(call):
     markup = InlineKeyboardMarkup()
     markup.row_width = 2
     vpn_type = call.data.upper()
     markup.add(
-        InlineKeyboardButton("HP 2 BULAN", callback_data=f"1hp_{call.data}"),
-        InlineKeyboardButton("STB 2 BULAN", callback_data=f"1stb_{call.data}")
+        InlineKeyboardButton("2 IP / STB", callback_data=f"1hp_{call.data}"),
+        InlineKeyboardButton("5 IP / STB", callback_data=f"1stb_{call.data}")
     )
-    bot.send_message(call.message.chat.id, "Pilih Masa Aktif Yang Diinginkan :", reply_markup=markup)
+    
+    bot.edit_message_text(
+            chat_id=call.message.chat.id, 
+            message_id=call.message.message_id,
+            text="𝙋𝙞𝙡𝙞𝙝 𝙊𝙥𝙨𝙞 𝙐𝙣𝙩𝙪𝙠 𝙈𝙚𝙡𝙖𝙣𝙟𝙪𝙩𝙠𝙖𝙣 . . .",
+            reply_markup=markup
+        )
 
 # Function to handle VPN purchase
 def handle_vpn_purchase(call):
@@ -258,14 +318,18 @@ def handle_vpn_purchase(call):
         try:
             with open(file_path, 'r') as file:
                 vpn_info = file.read()
-                bot.send_message(call.message.chat.id, vpn_info)
-                bot.send_message(call.message.chat.id, f"Pembayaran Sukses sebanyak {amount_to_deduct}. Sisa saldo: {new_saldo}")
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=f"{vpn_info}\n\nPembayaran Sukses sebanyak {amount_to_deduct}. Sisa saldo: {new_saldo}"
+                )
         except FileNotFoundError:
             bot.send_message(call.message.chat.id, "File VPN tidak ditemukan.")
     else:
         bot.send_message(call.message.chat.id, "Saldo Anda tidak mencukupi untuk pembelian ini.")
 
-# Fungsi untuk memproses nominal top up dari pengguna
+
+#======================= FITUR HANDLE TOP UP ================
 def process_topup(message):
     try:
         nominal = int(message.text)  # Pastikan pengguna memasukkan angka
@@ -305,7 +369,7 @@ def process_transfer_proof(message):
         bot.send_message(chat_id, "Silakan kirimkan foto bukti transfer")
         bot.register_next_step_handler_by_chat_id(chat_id, process_transfer_proof)
         
-# Process adding balance by admin
+#=================== FITUR ADD SALDO =================
 def process_add_balance(message):
     try:
         chat_id, amount = map(int, message.text.split())
@@ -333,7 +397,7 @@ def process_add_balance(message):
     except (ValueError, IndexError):
         bot.send_message(ADMIN_CHAT_ID, "Format tidak valid. Silakan masukkan Chat ID dan jumlah saldo yang benar, dipisahkan dengan spasi.")
         
-# Process adding text to file by admin
+#====================== FITUR ADD TEXT ===================
 def process_add_text(message):
     try:
         file_name, text = message.text.split('|', 1)
@@ -355,8 +419,8 @@ def process_add_text(message):
     except Exception as e:
         bot.send_message(ADMIN_CHAT_ID, f"Terjadi kesalahan: {e}")
         
-  # Function to process reward withdrawal by admin
-@bot.message_handler(commands=['acc'])
+#=================== FITUR WD REWARD SUKSES ===========
+@bot.message_handler(commands=['sukses'])
 def acc_cairkan_reward(message):
     try:
         parts = message.text.split()
@@ -371,11 +435,11 @@ def acc_cairkan_reward(message):
     except (ValueError, IndexError):
         bot.send_message(message.chat.id, "Format tidak valid. Pastikan Anda memasukkan Chat ID yang benar.")
         
-
+#================= MENAMBAHKAN & EDIT DATA REKENING ===========
 # Fungsi untuk mendapatkan nama dari pengguna
 def get_nama(message):
     nama = message.text
-    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening, Sertakan Nama Bank/Dompet dengan tanda pisah |. Contoh : 082292615651 | DANA')
+    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening. Nomor DANA/GOPAY:')
     bot.register_next_step_handler(msg, get_nomor_rekening, nama)
 
 # Fungsi untuk mendapatkan nomor rekening dan menyimpan ke database
@@ -389,8 +453,30 @@ def get_nomor_rekening(message, nama):
     
     bot.send_message(message.chat.id, 'Data rekening Anda telah disimpan!')
 
+# Fungsi untuk mengupdate nama pelanggan
+def update_nama(message):
+    nama_baru = message.text
+    
+    # Update nama di database
+    cursor.execute('UPDATE pelanggan SET nama = ? WHERE chat_id = ?', (nama_baru, message.chat.id))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, 'Nama rekening Anda telah diperbarui!')
+
+# Fungsi untuk mengupdate nomor rekening pelanggan
+def update_rekening(message):
+    nomor_rekening_baru = message.text
+    
+    # Update nomor rekening di database
+    cursor.execute('UPDATE pelanggan SET nomor_rekening = ? WHERE chat_id = ?', (nomor_rekening_baru, message.chat.id))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, 'Nomor rekening Anda telah diperbarui!')
+  
+
+#================= FUNGSI MELIHAT DATA REKENING ================
 # Fungsi untuk menampilkan data rekening kepada admin secara perorangan
-@bot.message_handler(commands=['lihat_data'])
+@bot.message_handler(commands=['rekening'])
 def lihat_data_rekening(message):
     if str(message.chat.id) == ADMIN_CHAT_ID:
         try:
@@ -417,25 +503,22 @@ def lihat_data_rekening(message):
     else:
         bot.send_message(message.chat.id, 'Anda tidak memiliki izin untuk melihat data ini.')
 
-# Fungsi untuk mengupdate nama pelanggan
-def update_nama(message):
-    nama_baru = message.text
+#=================== FUNGSI BROADCAST ==============
+def send_broadcast_message(message):
+    broadcast_text = message.text
     
-    # Update nama di database
-    cursor.execute('UPDATE pelanggan SET nama = ? WHERE chat_id = ?', (nama_baru, message.chat.id))
-    conn.commit()
+    # Get all users' chat IDs from the database
+    cursor.execute("SELECT chat_id FROM users")
+    users = cursor.fetchall()
     
-    bot.send_message(message.chat.id, 'Nama rekening Anda telah diperbarui!')
-
-# Fungsi untuk mengupdate nomor rekening pelanggan
-def update_rekening(message):
-    nomor_rekening_baru = message.text
+    # Send the broadcast message to each user
+    for user in users:
+        try:
+            bot.send_message(user[0], f"📢 INFORMASI 📢\n\n{broadcast_text}")
+        except Exception as e:
+            print(f"Failed to send message to {user[0]}: {e}")
     
-    # Update nomor rekening di database
-    cursor.execute('UPDATE pelanggan SET nomor_rekening = ? WHERE chat_id = ?', (nomor_rekening_baru, message.chat.id))
-    conn.commit()
+    bot.send_message(message.chat.id, "Pesan telah berhasil dikirim ke semua pengguna.")
     
-    bot.send_message(message.chat.id, 'Nomor rekening Anda telah diperbarui!')
-
 # Start polling
 bot.polling()
