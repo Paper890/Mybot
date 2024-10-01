@@ -409,11 +409,15 @@ def process_add_text(message):
 
         file_path = os.path.join(directory, file_name.strip())
 
-        # Write the text to the file
-        with open(file_path, 'a') as file:
+        # Check if the file already exists and remove it
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        # Write the new text to the file (this will create a new file)
+        with open(file_path, 'w') as file:  # 'w' mode creates a new file or overwrites existing one
             file.write(text.strip() + "\n")
 
-        bot.send_message(ADMIN_CHAT_ID, f"Teks telah berhasil ditambahkan ke file {file_name}.")
+        bot.send_message(ADMIN_CHAT_ID, f"Teks telah berhasil ditambahkan ke file baru {file_name}.")
     except ValueError:
         bot.send_message(ADMIN_CHAT_ID, "Format tidak valid. Pastikan Anda memasukkan nama file dan teks, dipisahkan oleh tanda '|'.")
     except Exception as e:
