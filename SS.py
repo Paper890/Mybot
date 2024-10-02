@@ -47,6 +47,13 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS redeem_codes (
                     saldo_reward INTEGER, 
                     used INTEGER DEFAULT 0
                 )''')
+                
+# Create table for tracking which users have redeemed codes
+cursor.execute('''CREATE TABLE IF NOT EXISTS redeemed_codes (
+                    chat_id INTEGER, 
+                    code TEXT,
+                    PRIMARY KEY (chat_id, code)
+                )''')
 
 conn.commit()
 
@@ -580,7 +587,6 @@ def finalize_redeem_code(message, code, custom_name, user_limit):
     
     bot.send_message(message.chat.id, f"Redeem code '{custom_name}' created with limit {user_limit} and saldo reward {saldo_reward}.")
 
-# Check redeem code by user
 @bot.message_handler(func=lambda message: True)
 def check_redeem_code(message):
     redeem_code = message.text.strip()
@@ -591,8 +597,17 @@ def check_redeem_code(message):
 
     if code_data:
         code, custom_name, user_limit, saldo_reward, used = code_data
+        
+        # Check if user already redeemed this code
+        cursor.execute('SELECT * FROM redeemed_codes WHERE chat_id = ? AND code = ?', (message.chat.id, redeem_code))
+        redeemed = cursor.fetchone()
+
+        if redeemed:
+            bot.send_message(message.chat.id, "Kamu telah menggunakan kode ini😁")
+            return
+
         if used < user_limit:
-            # Check if user already redeemed the code
+            # Check if user is registered
             cursor.execute('SELECT 1 FROM users WHERE chat_id = ?', (message.chat.id,))
             user = cursor.fetchone()
 
@@ -600,14 +615,19 @@ def check_redeem_code(message):
                 # Update the redeem code usage and add saldo to user
                 cursor.execute('UPDATE redeem_codes SET used = used + 1 WHERE code = ?', (redeem_code,))
                 add_saldo(message.chat.id, saldo_reward)
-                bot.send_message(message.chat.id, f"Kode Redeem '{custom_name}' berhasil☺️. Kamu mendapatkan Saldo sebesar '{saldo_reward}'")
+                
+                # Record that the user has redeemed this code
+                cursor.execute('INSERT INTO redeemed_codes (chat_id, code) VALUES (?, ?)', (message.chat.id, redeem_code))
+                conn.commit()
+                
+                bot.send_message(message.chat.id, f"Selamat! Kamu telah redeem '{custom_name}' Dan menerima {saldo_reward} saldo.")
             else:
-                bot.send_message(message.chat.id, "You need to be a registered user to redeem this code.")
+                bot.send_message(message.chat.id, "Kamu tidak terdaftar untuk mendapatkan ini")
         else:
-            bot.send_message(message.chat.id, "Maaf, Kode Redeem Sudah Habis☹️")
+            bot.send_message(message.chat.id, "Maaf, Kode redeem sudah habis🥲")
     else:
         bot.send_message(message.chat.id, "Ketik /start untuk memulai bot ini")
 
-    
+
 # Start polling
 bot.polling()
