@@ -606,7 +606,7 @@ def check_redeem_code(message):
         else:
             bot.send_message(message.chat.id, "Maaf, Kode Redeem Sudah Habis☹️")
     else:
-        bot.send_message(message.chat.id, "Invalid redeem code.")
+        bot.send_message(message.chat.id, "Ketik /start untuk memulai bot ini")
 
     
 # Start polling
