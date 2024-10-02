@@ -27,6 +27,7 @@ cursor = conn.cursor()
 # Create tables for storing balance, rewards, referrals, and prices
 cursor.execute('''CREATE TABLE IF NOT EXISTS users
                   (chat_id INTEGER PRIMARY KEY, saldo INTEGER DEFAULT 0, reward INTEGER DEFAULT 0, referrer_id INTEGER)''')
+                  
 cursor.execute('''CREATE TABLE IF NOT EXISTS prices
                   (id INTEGER PRIMARY KEY, date TEXT, harga_1 INTEGER, harga_2 INTEGER)''')
 cursor.execute('''
@@ -37,6 +38,16 @@ CREATE TABLE IF NOT EXISTS pelanggan (
     nomor_rekening TEXT
 )
 ''')
+
+# Create table for redeem codes
+cursor.execute('''CREATE TABLE IF NOT EXISTS redeem_codes (
+                    code TEXT PRIMARY KEY, 
+                    custom_name TEXT, 
+                    user_limit INTEGER,  -- Renamed 'limit' to 'user_limit'
+                    saldo_reward INTEGER, 
+                    used INTEGER DEFAULT 0
+                )''')
+
 conn.commit()
 
 #================= DATA BASE CONNECTION =============
@@ -130,7 +141,7 @@ def send_welcome(message):
 
     markup = InlineKeyboardMarkup()
     markup.row_width = 3
-    markup.add(InlineKeyboardButton("MENU ORDER VPN", callback_data="menu_vpn"))
+    markup.add(InlineKeyboardButton("MENU VPN", callback_data="menu_vpn"))
     markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
                InlineKeyboardButton("MENU REFERALL", callback_data="menu_referral"))
     
@@ -199,9 +210,7 @@ def callback_query(call):
         )
     
     elif call.data == "teman":
-        bot_info = bot.get_me()
-        ref_link = f"https://t.me/{bot_info.username}?start={call.message.chat.id}"
-    
+        ref_link = f"https://t.me/sanstore_bot?start={call.message.chat.id}"
         bot.send_message(call.message.chat.id, f"Berikut Adalah link Referall Anda:\n{ref_link}\nDapatkan Reward Dengan Mengundang Teman Kamu")
         
         # Show list of invited friends
@@ -269,8 +278,12 @@ def callback_query(call):
         bot.register_next_step_handler(msg, update_rekening)
   
     elif call.data == "add_text":
-        if str(call.message.chat.id) == ADMIN_CHAT_ID:
-            bot.send_message(call.message.chat.id, "Masukkan nama file (misal: ssh.txt) dan teks yang ingin Anda masukkan ke dalam file, dipisahkan oleh tanda '|'. Contoh: ssh.txt|Ini adalah teks.")
+        if str(call.message.chat.id) == ADMIN_CHAT_ID:           
+            bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=f"Contoh input Text : ssh.txt|CONTOHISITEXT"
+            )
             bot.register_next_step_handler(call.message, process_add_text)
             
     elif call.data == "informasi":
@@ -409,15 +422,11 @@ def process_add_text(message):
 
         file_path = os.path.join(directory, file_name.strip())
 
-        # Check if the file already exists and remove it
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        # Write the new text to the file (this will create a new file)
-        with open(file_path, 'w') as file:  # 'w' mode creates a new file or overwrites existing one
+        # Write the text to the file
+        with open(file_path, 'a') as file:
             file.write(text.strip() + "\n")
 
-        bot.send_message(ADMIN_CHAT_ID, f"Teks telah berhasil ditambahkan ke file baru {file_name}.")
+        bot.send_message(ADMIN_CHAT_ID, f"Teks telah berhasil ditambahkan ke file {file_name}.")
     except ValueError:
         bot.send_message(ADMIN_CHAT_ID, "Format tidak valid. Pastikan Anda memasukkan nama file dan teks, dipisahkan oleh tanda '|'.")
     except Exception as e:
@@ -523,6 +532,82 @@ def send_broadcast_message(message):
             print(f"Failed to send message to {user[0]}: {e}")
     
     bot.send_message(message.chat.id, "Pesan telah berhasil dikirim ke semua pengguna.")
+    
+    
+#============= FITUR REDEEM CODE ===================
+
+# Admin check (replace with actual admin ID check)
+def is_admin(chat_id):
+    admin_ids = [576495165]  # Replace with actual admin chat IDs
+    return chat_id in admin_ids
+    
+# Function to add balance to a user's account
+def add_saldo(chat_id, saldo_amount):
+    cursor.execute("UPDATE users SET saldo = saldo + ? WHERE chat_id = ?", (saldo_amount, chat_id))
+    conn.commit()
+
+# Admin command to create a redeem code
+@bot.message_handler(commands=['redeem'])
+def create_redeem(message):
+    if is_admin(message.chat.id):
+        msg = bot.send_message(message.chat.id, "Buat nama untuk kode redeem")
+        bot.register_next_step_handler(msg, process_custom_name)
+    else:
+        bot.send_message(message.chat.id, "You are not authorized to use this command.")
+
+def process_custom_name(message):
+    custom_name = message.text
+    msg = bot.send_message(message.chat.id, "Konfirmasi kode redeem")
+    bot.register_next_step_handler(msg, lambda m: process_redeem_code(m, custom_name))
+
+def process_redeem_code(message, custom_name):
+    code = message.text
+    msg = bot.send_message(message.chat.id, "Batas jumlah claim kode redeem")
+    bot.register_next_step_handler(msg, lambda m: process_redeem_limit(m, code, custom_name))
+
+def process_redeem_limit(message, code, custom_name):
+    user_limit = int(message.text)
+    msg = bot.send_message(message.chat.id, "Jumlah saldo yang di dapat")
+    bot.register_next_step_handler(msg, lambda m: finalize_redeem_code(m, code, custom_name, user_limit))
+
+def finalize_redeem_code(message, code, custom_name, user_limit):
+    saldo_reward = int(message.text)
+    
+    # Insert the redeem code into the database
+    cursor.execute('INSERT INTO redeem_codes (code, custom_name, user_limit, saldo_reward) VALUES (?, ?, ?, ?)',
+                   (code, custom_name, user_limit, saldo_reward))
+    conn.commit()
+    
+    bot.send_message(message.chat.id, f"Redeem code '{custom_name}' created with limit {user_limit} and saldo reward {saldo_reward}.")
+
+# Check redeem code by user
+@bot.message_handler(func=lambda message: True)
+def check_redeem_code(message):
+    redeem_code = message.text.strip()
+
+    # Fetch the redeem code from the database
+    cursor.execute('SELECT * FROM redeem_codes WHERE code = ?', (redeem_code,))
+    code_data = cursor.fetchone()
+
+    if code_data:
+        code, custom_name, user_limit, saldo_reward, used = code_data
+        if used < user_limit:
+            # Check if user already redeemed the code
+            cursor.execute('SELECT 1 FROM users WHERE chat_id = ?', (message.chat.id,))
+            user = cursor.fetchone()
+
+            if user:
+                # Update the redeem code usage and add saldo to user
+                cursor.execute('UPDATE redeem_codes SET used = used + 1 WHERE code = ?', (redeem_code,))
+                add_saldo(message.chat.id, saldo_reward)
+                bot.send_message(message.chat.id, f"Kode Redeem '{custom_name}' berhasil☺️. Kamu mendapatkan Saldo sebesar '{saldo_reward}'")
+            else:
+                bot.send_message(message.chat.id, "You need to be a registered user to redeem this code.")
+        else:
+            bot.send_message(message.chat.id, "Maaf, Kode Redeem Sudah Habis☹️")
+    else:
+        bot.send_message(message.chat.id, "Invalid redeem code.")
+
     
 # Start polling
 bot.polling()
