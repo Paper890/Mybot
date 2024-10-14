@@ -1,343 +1,849 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import subprocess
+import json
+import datetime
+from datetime import datetime, timedelta
+from uuid import uuid4
+import base64
+import telebot
 import sqlite3
 import os
 import zipfile
 import threading
-from datetime import datetime
-import shutil
-#----BOT INISIAL---#
-# Initialize bot with your bot token
-API_TOKEN = '7360190308:AAFCXEy6tEzRvCgzF44XzlcX3PRNV-vPkxo'
-ADMIN_CHAT_ID = '576495165'  # Replace with the actual admin ChatID
+
+
+API_TOKEN = '7500003101:AAHipbo4mytY-EPrTEcdz0rjKwyV_-v8iPI'
 bot = telebot.TeleBot(API_TOKEN)
 
-# Database paths
-DB_PATH = 'san_store.db'
-BACKUP_DIR = 'backups'
-
+admin_id = 576495165  
 user_data = {}
+DB_PATH = 'user_data.db'
+BACKUP_DIR = 'backups/'
 
-# Set up SQLite database
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cursor = conn.cursor()
+#================== DATABASE AREA ===========
+# Database setup
+def init_db():
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+                        user_id INTEGER PRIMARY KEY,
+                        balance INTEGER DEFAULT 0,
+                        reseller_status TEXT DEFAULT 'non reseller')''')
+    # Check if the reseller_status column exists, if not, add it
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'reseller_status' not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN reseller_status TEXT DEFAULT 'non reseller'")
+    conn.commit()
+    conn.close()
 
-# Create tables for storing balance, rewards, referrals, and prices
-cursor.execute('''CREATE TABLE IF NOT EXISTS users
-                  (chat_id INTEGER PRIMARY KEY, saldo INTEGER DEFAULT 0, reward INTEGER DEFAULT 0, referrer_id INTEGER)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS prices
-                  (id INTEGER PRIMARY KEY, date TEXT, harga_1 INTEGER, harga_2 INTEGER)''')
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS pelanggan (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER UNIQUE,
-    nama TEXT,
-    nomor_rekening TEXT
-)
-''')
-conn.commit()
+def get_user_data(user_id):
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id, balance, reseller_status) VALUES (?, 0, "non reseller")', (user_id,))
+    cursor.execute('SELECT balance, reseller_status FROM users WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return {'balance': result[0], 'reseller_status': result[1]}
 
-# Function to create a zip backup of the database
-def backup_database():
-    if not os.path.exists(BACKUP_DIR):
-        os.makedirs(BACKUP_DIR)
+
+def update_balance(user_id, amount):
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id, balance, reseller_status) VALUES (?, 0, "non reseller")', (user_id,))
+    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_filename = os.path.join(BACKUP_DIR, f"backup_{timestamp}.zip")
+    # Fetch the updated balance and current reseller status
+    cursor.execute('SELECT balance, reseller_status FROM users WHERE user_id = ?', (user_id,))
+    balance, reseller_status = cursor.fetchone()
     
-    with zipfile.ZipFile(zip_filename, 'w') as backup_zip:
-        backup_zip.write(DB_PATH, os.path.basename(DB_PATH))
+    # Update reseller status based on new balance and top-up rules
+    if reseller_status == 'reseller' and balance == 0:
+        # If balance reaches 0, downgrade to non reseller
+        cursor.execute('UPDATE users SET reseller_status = "non reseller" WHERE user_id = ?', (user_id,))
+    elif reseller_status != 'reseller' and amount >= 30000:
+        # If top-up is 30,000 or more, upgrade to reseller
+        cursor.execute('UPDATE users SET reseller_status = "reseller" WHERE user_id = ?', (user_id,))
+    elif reseller_status == 'reseller' and amount < 30000 and balance > 0:
+        # If top-up is below 30,000 but balance is still above 0, retain reseller status
+        pass
+    elif amount < 30000:
+        # If top-up is below 30,000 and user is not a reseller, keep status as non reseller
+        cursor.execute('UPDATE users SET reseller_status = "non reseller" WHERE user_id = ?', (user_id,))
     
-    return zip_filename
+    conn.commit()
+    conn.close()
 
-# Function to send the backup to the admin
-def send_backup_to_admin():
-    zip_filename = backup_database()
-    with open(zip_filename, 'rb') as backup_file:
-        bot.send_document(ADMIN_CHAT_ID, backup_file)
 
-# Function to restore the database from a zip file
-def restore_database(zip_filename):
-    with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
-        zip_ref.extract(os.path.basename(DB_PATH), os.path.dirname(DB_PATH))
+# Initialize the database
+init_db()
 
-# Schedule autobackup every 6 hours
-def schedule_backup():
-    while True:
-        send_backup_to_admin()
-        threading.Event().wait(21600)  # 6 hours in seconds
+#============================================
 
-# Start the backup scheduler in a new thread
-backup_thread = threading.Thread(target=schedule_backup, daemon=True)
-backup_thread.start()
-
-# Restore database when a zip file is sent
-@bot.message_handler(content_types=['document'])
-def handle_zip_file(message):
-    if str(message.chat.id) == ADMIN_CHAT_ID and message.document.mime_type == 'application/zip':
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        zip_filename = os.path.join(BACKUP_DIR, message.document.file_name)
-        
-        with open(zip_filename, 'wb') as new_file:
-            new_file.write(downloaded_file)
-        
-        restore_database(zip_filename)
-        bot.send_message(ADMIN_CHAT_ID, "Database berhasil dipulihkan dari backup.")
-
-# Initial prices
-INITIAL_HARGA_1 = 8000
-INITIAL_HARGA_2 = 14000
-
-# Function to calculate daily price based on the current date
-def get_daily_prices():
-    today = datetime.now().date()
-    start_of_month = today.replace(day=1)
-
-    # Calculate the number of days since the start of the month
-    days_passed = (today - start_of_month).days
-
-    # Calculate the prices
-    harga_1 = max(INITIAL_HARGA_1 - (166 * days_passed), 0)
-    harga_2 = max(INITIAL_HARGA_2 - (166 * days_passed), 0)
-
-    return harga_1, harga_2
-
-# Start command handler
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
-    referrer_id = message.text.split()[1] if len(message.text.split()) > 1 else None
-    create_or_update_user(message.chat.id, referrer_id)
-    saldo, reward = get_user(message.chat.id)
-
-    # Get the daily prices
-    harga_1, harga_2 = get_daily_prices()
-
+    user_data = get_user_data(message.chat.id)
+    reseller_status = user_data['reseller_status']
+    vpn_price = 5000 if reseller_status == 'reseller' else 10000
+    
     markup = InlineKeyboardMarkup()
-    markup.row_width = 3
-    markup.add(InlineKeyboardButton("SSH", callback_data="ssh"),
-               InlineKeyboardButton("VMESS", callback_data="vmess"),
-               InlineKeyboardButton("TROJAN", callback_data="trojan"))
-    markup.add(InlineKeyboardButton("AKRAB", callback_data="akrab_button"))      
-    markup.add(InlineKeyboardButton("TOPUP", callback_data="topup"),
-               InlineKeyboardButton("TEMAN", callback_data="teman"))
-    markup.add(InlineKeyboardButton("CAIRKAN REWARD", callback_data="cairkan_reward"))
-    markup.add(InlineKeyboardButton("REKENING REWARD", callback_data="rek_reward"))
 
-    # Only show "LIST REWARD", "ADD BALANCE", and "ADD TEXT TO FILE" to the admin
-    if str(message.chat.id) == ADMIN_CHAT_ID:
-        markup.add(InlineKeyboardButton("LIST REWARD", callback_data="list_reward"),
-                   InlineKeyboardButton("ADD BALANCE", callback_data="add_balance"))
-        markup.add(InlineKeyboardButton("ADD TEXT TO FILE", callback_data="add_text"))
+    menu_vpn = InlineKeyboardButton("🛡️Menu VPN", callback_data="menu_vpn")
+    menu_kuota = InlineKeyboardButton("📱Menu Kuota", callback_data="menu_kuota")
+    menu_topup = InlineKeyboardButton("💰Top Up", callback_data="topup")
+    menu_ceksaldo = InlineKeyboardButton("💳Cek Saldo", callback_data="cek_saldo")
 
-    # Send the welcome message with prices
+    markup.add(menu_vpn, menu_kuota)
+    markup.add(menu_topup, menu_ceksaldo)
+
+    # Cek apakah user adalah admin
+    if message.chat.id == admin_id:
+        broadcast = InlineKeyboardButton("Broadcast", callback_data="broadcast")
+        markup.add(broadcast)
+
     bot.send_message(
-        message.chat.id, 
-        f"🔱SELAMAT BERBELANJA DI SAN STORE🔱\n-----------------------------------------\nJenis VPN.  = Premium Share VPN\nKoneksi     = 90%\nGaransi.     = Full Akun\nMasa Aktif.  = 30-60 Hari (Dari Tanggal 1)\n\nAkrab Official (Resmi)\nGaransi ✅ \nMasa Aktif = 27-30 Hari\n\nNote: Untuk Paket Akrab Tidak Menggunakan Saldo (Bayar Langsung Pas Order)\n\n💸 Saldo: {saldo}\n💰 Reward: {reward}\n\n💲 HARGA HARI INI 💲\n 1 HP  : {harga_1}\n 1 STB : {harga_2}",
+        message.chat.id,
+        "*»»——— SAN STORE BOT ———««*\n\n"
+        "🔹 *VPN Premium & Kuota Murah* 🔹\n"
+        "🔒 *Kecepatan & Keamanan Terbaik*\n\n"
+        f"👤 *Owner: @Sanmaxx*\n"
+        f"💲 *Status: {reseller_status.capitalize()}*\n"
+        f"💵 *Harga VPN: {vpn_price}*\n\n"
+        "*»»——— Thanks for coming ———««*",
+        parse_mode='Markdown',
         reply_markup=markup
     )
 
-# Function to get user info from the database
-def get_user(chat_id):
-    cursor.execute("SELECT saldo, reward FROM users WHERE chat_id=?", (chat_id,))
-    return cursor.fetchone()
 
-# Function to create or update a user in the database
-def create_or_update_user(chat_id, referrer_id=None):
-    cursor.execute("INSERT OR IGNORE INTO users (chat_id, referrer_id) VALUES (?, ?)", (chat_id, referrer_id))
-    conn.commit()
-
-# Callback query handler for InlineKeyboardButton actions
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    if call.data in ["ssh", "vmess", "trojan"]:
-        handle_vpn_choice(call)
-    elif call.data in ["1hp_ssh", "1stb_ssh", "1hp_vmess", "1stb_vmess", "1hp_trojan", "1stb_trojan"]:
-        handle_vpn_purchase(call)
-    elif call.data == "akrab_button":
-        # Create the inline keyboard markup
-        markup = InlineKeyboardMarkup()
-        markup.row_width = 3
-        markup.add(InlineKeyboardButton("MINI", callback_data="MINI"),
-                   InlineKeyboardButton("BIG", callback_data="BIG"),
-                   InlineKeyboardButton("JUMBO", callback_data="JUMBO"))
-
-        # Send the AKRAB package information message
-        sent_message = bot.send_message(
-            call.message.chat.id,
-            "💸 PAKET AKRAB RESMI (OFFICIAL) 💸\n\n"
-            "🔥 AKRAB MINI\n"
-            "Area 1 = 21GB\n"
-            "Area 2 = 24GB\n"
-            "Area 3 = 35GB\n"
-            "Area 4 = 59GB\n\n"
-            "Harga  : 60.000\n\n"
-            "🔥 AKRAB REWARD (Big)\n"
-            "Area 1 : 33,5-36,5 GB\n"
-            "Area 2 : 36,5-39,5 GB\n"
-            "Area 3 : 47-50 GB\n"
-            "Area 4 : 71-74 GB\n\n"
-            "Harga Reseller : 70.000\n\n"
-            "🔥 AKRAB XXL REWARD (Jumbo)\n"
-            "Area 1 : 65,5-67,5 GB\n"
-            "Area 2 : 70-72 GB\n"
-            "Area 3 : 83-85 GB\n"
-            "Area 4 : 123-125 GB\n\n"
-            "Harga : 85.000",
-            reply_markup=markup
-        )    
-
-       # Store message_id in user_data for potential future edits
-        user_data[call.message.chat.id] = {'message_id': sent_message.message_id}
-            
-    elif call.data in ["MINI", "BIG", "JUMBO"]:
-        user_data[call.message.chat.id]['quota_type'] = call.data
+@bot.callback_query_handler(func=lambda call: call.data in ["menu_vpn", "menu_kuota", "cek_saldo"])
+def callback_query_handler(call):
+    user_data = get_user_data(call.message.chat.id)
     
-    # Menghilangkan tombol dan mengubah pesan
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=user_data[call.message.chat.id]['message_id'],
-            text=f"Process Order {call.data}."
-        )
-        bot.send_message(call.message.chat.id, "Nomor XL/Axis Kamu :")
+    if call.data == "menu_vpn":
+        menu_vpn(call.message)
+    elif call.data == "menu_kuota":
+        bot.send_message(call.message.chat.id, "SEGERA HADIR")
+    elif call.data == "cek_saldo":
+        balance = user_data['balance']
+        bot.send_message(call.message.chat.id, f"Saldo Anda saat ini adalah: {balance}")
     
-    # Menyimpan data tambahan
-        bot.register_next_step_handler(call.message, ask_for_number)      
-        
-    elif call.data.startswith("process_") or call.data.startswith("complete_"):     
-         data_parts = call.data.split('_')
-         chat_id = int(data_parts[1])
-         message_id = int(data_parts[2])
-
-         if call.data.startswith("process_"):
-             bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} sedang DIPROSES.")
-             bot.send_message(chat_id, "Transaksi Anda sedang diproses.")
+       
+@bot.callback_query_handler(func=lambda call: call.data == "kembali") 
+def kembali_handler(call):
+    user_data = get_user_data(call.message.chat.id)
+    reseller_status = user_data['reseller_status']
+    vpn_price = 5000 if reseller_status == 'reseller' else 10000
     
-         elif call.data.startswith("complete_"):
-             bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} telah SELESAI.")
-             bot.send_message(chat_id, "Transaksi Anda telah selesai. Terima kasih!")
-        
-             # Menghapus pesan yang sudah SELESAI dari admin
-             if 'admin_message_id' in user_data[chat_id]:
-                 try:
-                     bot.delete_message(ADMIN_CHAT_ID, user_data[chat_id]['admin_message_id'])
-                 except telebot.apihelper.ApiException as e:
-                     print(f"Error deleting message: {e}")
-                 del user_data[chat_id]['admin_message_id']
-            
-    elif call.data == 'topup':
-        bot.answer_callback_query(call.id, "Masukkan jumlah nominal top up:")
-        bot.send_message(call.message.chat.id, "Silakan masukkan nominal yang ingin Anda top up:")
-        bot.register_next_step_handler_by_chat_id(call.message.chat.id, process_topup)
-    elif call.data == "teman":
-        ref_link = f"https://t.me/sanstore_bot?start={call.message.chat.id}"
-        bot.send_message(call.message.chat.id, f"Berikut Adalah link Referall Anda:\n{ref_link}\nAnda akan menerima 20% dari setiap top up yang dilakukan oleh teman yang Anda undang!.\n\nPencairan Reward Dilakukan Setiap Akhir bulan")
-        
-        # Show list of invited friends
-        cursor.execute("SELECT chat_id FROM users WHERE referrer_id = ?", (call.message.chat.id,))
-        friends = cursor.fetchall()
-        if friends:
-            response = "Teman yang sudah Anda undang:\n"
-            for friend in friends:
-                response += f"Chat ID: {friend[0]}\n"
-            bot.send_message(call.message.chat.id, response)
-        else:
-            bot.send_message(call.message.chat.id, "Belum ada teman yang diundang.")
-    elif call.data == "list_reward":
-        if str(call.message.chat.id) == ADMIN_CHAT_ID:
-            cursor.execute("SELECT chat_id, reward FROM users WHERE reward > 0")
-            rewards = cursor.fetchall()
-            if rewards:
-                response = "Daftar pengguna dengan reward:\n"
-                for r in rewards:
-                    response += f"Chat ID: {r[0]}, Reward: {r[1]}\n"
-                bot.send_message(call.message.chat.id, response)
-            else:
-                bot.send_message(call.message.chat.id, "Belum ada pengguna dengan reward.")
-    elif call.data == "add_balance":
-        if str(call.message.chat.id) == ADMIN_CHAT_ID:
-            bot.send_message(call.message.chat.id, "Masukkan Chat ID pengguna yang ingin Anda tambahkan saldo, diikuti oleh jumlah saldo yang ingin ditambahkan, dipisahkan dengan spasi. Contoh: 123456789 50000")
-            bot.register_next_step_handler(call.message, process_add_balance)
-    elif call.data == "cairkan_reward":
-        saldo, reward = get_user(call.message.chat.id)
-        if reward > 0:
-            bot.send_message(call.message.chat.id, f"Permintaan pencairan reward sebesar {reward} telah dikirim ke admin. Pastikan Kamu Telah Mengisi Rekening Reward")
-            bot.send_message(ADMIN_CHAT_ID, f"Permintaan pencairan reward:\nChat ID: `{call.message.chat.id}`\nNominal: `{reward}`", parse_mode="Markdown")
-        else:
-            bot.send_message(call.message.chat.id, "Reward Anda saat ini adalah 0. Tidak ada yang bisa dicairkan.")
-    elif call.data == 'rek_reward':
-        # Periksa apakah user sudah punya data rekening
-        cursor.execute('SELECT nama, nomor_rekening FROM pelanggan WHERE chat_id = ?', (call.message.chat.id,))
-        data = cursor.fetchone()
-        
-        if data:
-            # Jika data sudah ada, tampilkan datanya dengan opsi edit
-            response = f"Data Rekening Anda:\n\nNama: {data[0]}\nNo Rekening: {data[1]}\n\n"
-            response += "Klik tombol di bawah jika ingin mengedit data rekening Anda."
-            
-            markup = InlineKeyboardMarkup()
-            markup.row_width = 3
-            markup.add(InlineKeyboardButton("EDIT NAMA", callback_data="edit_nama"),
-                       InlineKeyboardButton("EDIT NOMOR REK", callback_data="edit_rekening"))
-            
-            bot.send_message(call.message.chat.id, response, reply_markup=markup)
-        else:
-            # Jika data belum ada, mulai proses input rekening
-            msg = bot.send_message(call.message.chat.id, 'Masukkan nama pemilik rekening:')
-            bot.register_next_step_handler(msg, get_nama)
-
-    elif call.data == 'edit_nama':
-        msg = bot.send_message(call.message.chat.id, 'Masukkan nama baru:')
-        bot.register_next_step_handler(msg, update_nama)
-    elif call.data == 'edit_rekening':
-        msg = bot.send_message(call.message.chat.id, 'Masukkan nomor rekening baru:')
-        bot.register_next_step_handler(msg, update_rekening)
-  
-    elif call.data == "add_text":
-        if str(call.message.chat.id) == ADMIN_CHAT_ID:
-            bot.send_message(call.message.chat.id, "Masukkan nama file (misal: ssh.txt) dan teks yang ingin Anda masukkan ke dalam file, dipisahkan oleh tanda '|'. Contoh: ssh.txt|Ini adalah teks.")
-            bot.register_next_step_handler(call.message, process_add_text)
-
-# Function to handle VPN choice
-def handle_vpn_choice(call):
     markup = InlineKeyboardMarkup()
-    markup.row_width = 2
-    vpn_type = call.data.upper()
-    markup.add(
-        InlineKeyboardButton("HP 2 BULAN", callback_data=f"1hp_{call.data}"),
-        InlineKeyboardButton("STB 2 BULAN", callback_data=f"1stb_{call.data}")
+
+    menu_vpn = InlineKeyboardButton("🛡️Menu VPN", callback_data="menu_vpn")
+    menu_kuota = InlineKeyboardButton("📱Menu Kuota", callback_data="menu_kuota")
+    menu_topup = InlineKeyboardButton("💰Top Up", callback_data="topup")
+    menu_ceksaldo = InlineKeyboardButton("💳Cek Saldo", callback_data="cek_saldo")
+
+    markup.add(menu_vpn, menu_kuota)
+    markup.add(menu_topup, menu_ceksaldo)
+
+    # Cek apakah user adalah admin
+    if call.message.chat.id == admin_id:
+        broadcast = InlineKeyboardButton("Broadcast", callback_data="broadcast")
+        markup.add(broadcast)
+
+    bot.edit_message_text(
+    chat_id=call.message.chat.id,
+    message_id=call.message.message_id,
+    text="*»»——— SAN STORE BOT ———««*\n\n"
+         "🔹 *VPN Premium & Kuota Murah* 🔹\n"
+         "🔒 *Kecepatan & Keamanan Terbaik*\n\n"
+         "👤 *Owner: @Sanmaxx*\n\n"
+         "💲 *Status: {reseller_status.capitalize()}*\n"
+         "💵 *Harga VPN: {vpn_price}*\n\n"
+         "*»»——— Thanks for coming ———««*",
+    parse_mode='Markdown',
+    reply_markup=markup
     )
-    bot.send_message(call.message.chat.id, "Pilih Masa Aktif Yang Diinginkan :", reply_markup=markup)
-
-# Function to handle VPN purchase
-def handle_vpn_purchase(call):
-    saldo, reward = get_user(call.message.chat.id)
-    harga_1, harga_2 = get_daily_prices()
     
-    if "1hp" in call.data:
-        amount_to_deduct = harga_1
-    elif "1stb" in call.data:
-        amount_to_deduct = harga_2
+#======================== BAGIAN FUNGSI UNTUK SEMUA BUTTON MENU ====================
+#----------------- PART SSH --------------
+def menu_vpn(message):
+    markup = InlineKeyboardMarkup()
 
-    if saldo >= amount_to_deduct:
-        new_saldo = saldo - amount_to_deduct
-        cursor.execute("UPDATE users SET saldo = ? WHERE chat_id = ?", (new_saldo, call.message.chat.id))
-        conn.commit()
+    menu_ssh = InlineKeyboardButton("SSH/OVPN", callback_data="menu_ssh")
+    menu_vmess = InlineKeyboardButton("VMESS/XRAY", callback_data="menu_vmess")
+    menu_trojan = InlineKeyboardButton("TROJAN/XRAY", callback_data="menu_trojan")
+    kembali = InlineKeyboardButton("KEMBALI", callback_data="kembali")
+    
 
-        vpn_type = call.data.split('_')[-1]  # ssh, vmess, or trojan
-        file_path = f"/root/san/bot/{vpn_type}.txt"
+    markup.add(menu_ssh, menu_vmess, menu_trojan)
+    markup.add(kembali)
 
-        try:
-            with open(file_path, 'r') as file:
-                vpn_info = file.read()
-                bot.send_message(call.message.chat.id, vpn_info)
-                bot.send_message(call.message.chat.id, f"Pembayaran Sukses sebanyak {amount_to_deduct}. Sisa saldo: {new_saldo}")
-        except FileNotFoundError:
-            bot.send_message(call.message.chat.id, "File VPN tidak ditemukan.")
+    bot.edit_message_text(
+    chat_id=message.chat.id,
+    message_id=message.message_id,
+    text="*»»——— SAN STORE BOT ———««*\n\n"
+         "🔹*VPN Premium Rules*🔹\n"
+         "❌ *Dilarang Multi Login Melebihi ketentuan* \n\n"
+         "Banned Otomatis Tanpa pemberitahuan dan tidak menerima Refund atau Garansi dalam bentuk apapun\n"
+         "*»»——— Thanks for coming ———««*",
+    parse_mode='Markdown',
+    reply_markup=markup
+    )
+    
+#------------------------
+@bot.callback_query_handler(func=lambda call: call.data == "menu_ssh") 
+def menu_ssh_handler(call):
+    sub_menu_ssh(call.message)
+                
+def sub_menu_ssh(message):
+    markup = InlineKeyboardMarkup()
+    
+    ssh_create_button = InlineKeyboardButton("NEW SSH", callback_data="create_ssh")
+    ssh_renew_button = InlineKeyboardButton("RENEW SSH", callback_data="renew_ssh")
+    kembali = InlineKeyboardButton("KEMBALI", callback_data="kembali")
+    markup.add(ssh_create_button, ssh_renew_button)
+    markup.add(kembali)
+    
+    
+    bot.edit_message_text(
+    chat_id=message.chat.id,
+    message_id=message.message_id,
+    text="*»»——— SAN STORE BOT ———««*\n\n"
+         "🔹 *SSH PREMIUM* 🔹\n\n"
+         "Region : SG\n"
+         "ISP : DigitalOcean\n"
+         "Max IP : 5IP/STB\n"
+         "*»»——— Thanks for coming ———««*",
+    parse_mode='Markdown',
+    reply_markup=markup
+    )
+    
+@bot.callback_query_handler(func=lambda call: call.data in ["create_ssh", "renew_ssh"])
+def handle_callback(call):
+    user_data = get_user_data(call.message.chat.id)
+    reseller_status = user_data['reseller_status']
+    vpn_price = 5000 if reseller_status == 'reseller' else 10000
+    
+    if call.data == "create_ssh":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            create_ssh(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+    elif call.data == "renew_ssh":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            renew_ssh(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+        
+
+def create_ssh(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_username_ssh)
+
+def renew_ssh(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_renew_ssh)
+
+def get_username_ssh(message):
+    username = message.text.strip()
+    
+    # Validasi username: tidak boleh mengandung spasi dan panjang maksimal 8 karakter
+    if ' ' in username or len(username) > 8:
+        bot.send_message(message.chat.id, 'Username tidak boleh mengandung spasi dan maksimal 8 karakter. Masukkan username lain:')
+        bot.register_next_step_handler(message, get_username_ssh)
+    elif username.lower() == 'root' or username in get_existing_users():
+        bot.send_message(message.chat.id, 'Username tidak valid atau sudah ada. Silakan masukkan username lain:')
+        bot.register_next_step_handler(message, get_username_ssh)
     else:
-        bot.send_message(call.message.chat.id, "Saldo Anda tidak mencukupi untuk pembelian ini.")
+        bot.send_message(message.chat.id, '*🔐Input Password:*', parse_mode='Markdown')
+        bot.register_next_step_handler(message, get_password, username)
 
-# Fungsi untuk memproses nominal top up dari pengguna
+def get_password(message, username):
+    password = message.text.strip()
+    
+    # Set default expiry to 30 days
+    expired_days = 30
+    
+    # Call the create account function directly with 30 days expiry
+    create_account_action(username, password, expired_days, message)
+
+def create_account_action(username, password, expired_days, message):
+    exp_date = (datetime.now() + timedelta(days=expired_days)).strftime('%Y-%m-%d')
+
+    # Membuat akun SSH
+    subprocess.run(['useradd', '-e', exp_date, '-s', '/bin/false', '-M', username])
+    subprocess.run(['sh', '-c', f'echo "{username}:{password}" | chpasswd'])
+
+    # Mendapatkan informasi IP dan domain
+    domain = subprocess.getoutput("cat /etc/xray/domain")
+    IP = subprocess.getoutput("curl -sS ifconfig.me")
+
+    # Mendapatkan tanggal expired
+    exp = subprocess.getoutput(f"chage -l {username} | grep 'Account expires' | awk -F': ' '{{print $2}}'")
+
+    # Mengirim informasi akun kepada pengguna
+    result_message = (
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• SSH ACCOUNT INFORMATION •\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"  Username   : `{username}`\n"
+        f"  Password   : `{password}`\n"
+        f"  Expired On : {exp}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"  IP         : {IP}\n"
+        f"  Host       : `{domain}`\n"
+        f"  OpenSSH    : 22\n"
+        f"  Dropbear   : 443\n"
+        f"  SSH-WS     : 80, 8880\n"
+        f"  SSH-SSL-WS : 443\n"
+        f"  SSH-UDP    : 56-65545\n"
+        f"  SSL/TLS    :443\n"
+        f"  UDPGW      : 7100-7300\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"  GET /HTTP/1.1[crlf]Host: [host] [crlf]Upgrade: websocket[crlf][crlf]\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+    
+    bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+
+# Tambahkan dictionary untuk melacak percobaan
+user_attempts = {}
+
+def get_renew_ssh(message):
+    username = message.text.strip()
+    user_id = message.chat.id
+    
+    # Periksa apakah pengguna sudah ada di dalam sesi percobaan
+    if user_id not in user_attempts:
+        user_attempts[user_id] = 1  # Inisialisasi dengan 1 percobaan
+    else:
+        user_attempts[user_id] += 1  # Tambah percobaan jika sudah ada
+    
+    # Jika username salah 3 kali, akhiri sesi
+    if user_attempts[user_id] > 3:
+        bot.send_message(message.chat.id, 'Anda telah salah memasukkan username sebanyak 3 kali. Silakan mulai dari awal.')
+        user_attempts.pop(user_id, None)  # Hapus percobaan untuk user ini
+        return
+    
+    # Jika username valid, reset percobaan dan lanjutkan proses perpanjangan
+    if username not in get_existing_users():
+        bot.send_message(message.chat.id, 'Username Ssh Tidak Ditemukan')
+        bot.register_next_step_handler(message, get_renew_ssh)
+    else:
+        user_attempts.pop(user_id, None)  # Reset percobaan jika berhasil
+        renew_account_action(username, message)
+
+def renew_account_action(username, message):
+    expired_days = 30
+    
+    # Mendapatkan tanggal expired saat ini
+    current_exp = subprocess.getoutput(f"chage -l {username} | grep 'Account expires' | awk -F': ' '{{print $2}}'")
+    current_exp_date = datetime.strptime(current_exp.strip(), '%b %d, %Y')
+    new_exp_date = current_exp_date + timedelta(days=expired_days)
+    new_exp_str = new_exp_date.strftime('%Y-%m-%d')
+
+    # Memperbarui tanggal expired akun
+    subprocess.run(['chage', '-E', new_exp_str, username])
+
+    # Mengirim informasi perpanjangan kepada pengguna
+    result_message = (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "       • Successfully Renew •\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Username : {username}\n"
+        f"Masa Aktif : {new_exp_str}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+    bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+
+def get_existing_users():
+    try:
+        users = subprocess.getoutput("cut -d: -f1 /etc/passwd").split()
+        return users
+    except Exception as e:
+        print(f"Error fetching existing users: {e}")
+        return []
+
+#--------------------- PART VMESS -------------------
+@bot.callback_query_handler(func=lambda call: call.data == "menu_vmess") 
+def menu_vmess_handler(call):
+    sub_menu_vmess(call.message)
+
+def sub_menu_vmess(message):
+    markup = InlineKeyboardMarkup()
+    
+    create_button = InlineKeyboardButton("NEW VMESS", callback_data="create_vmess")
+    renew_button = InlineKeyboardButton("RENEW VMESS", callback_data="renew_vmess")
+    kembali = InlineKeyboardButton("KEMBALI", callback_data="kembali")
+    markup.add(create_button, renew_button)
+    markup.add(kembali)
+    
+    bot.edit_message_text(
+    chat_id=message.chat.id,
+    message_id=message.message_id,
+    text="*»»——— SAN STORE BOT ———««*\n\n"
+         "🔹 *VMESS PREMIUM* 🔹\n\n"
+         "Region : SG\n"
+         "ISP : DigitalOcean\n"
+         "Max IP : 5IP/STB\n"
+         "*»»——— Thanks for Order ———««*",
+    parse_mode='Markdown',
+    reply_markup=markup
+    )
+#======================================#
+@bot.callback_query_handler(func=lambda call: call.data in ["create_vmess", "renew_vmess"])
+def handle_callback(call):
+    user_data = get_user_data(call.message.chat.id)
+    reseller_status = user_data['reseller_status']
+    vpn_price = 5000 if reseller_status == 'reseller' else 10000
+    
+    if call.data == "create_vmess":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            create_vmess(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+    elif call.data == "renew_vmess":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            renew_vmess(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+       
+
+def create_vmess(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_username_vmess)
+
+def get_username_vmess(message):
+    username = message.text
+    if is_username_exists(username):
+        bot.send_message(message.chat.id, 'Nama sudah ada, Silahkan Masukkan Username Yang lain:')
+        bot.register_next_step_handler(message, get_username_vmess)
+    else:
+        # Automatically set expired to 30 days
+        expired_days = 30
+        exp_date = (datetime.now() + timedelta(days=expired_days)).strftime('%Y-%m-%d')
+        domain = subprocess.getoutput("cat /etc/xray/domain")
+        uuid = str(uuid4())
+
+        # Update config.json
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            # Insert new user details
+            new_user_entry = f'\n### {username} {exp_date}\n}},{{"id": "{uuid}","alterId": 0,"email": "{username}"'
+
+            # Find the position to insert for #vmess
+            vmess_pos = config_data.find('#vmess')
+            if (vmess_pos != -1):
+                insert_pos = config_data.find('\n', vmess_pos)
+                config_data = config_data[:insert_pos] + new_user_entry + config_data[insert_pos:]
+
+            # Find the position to insert for #vmessgrpc
+            vmessgrpc_pos = config_data.find('#vmessgrpc')
+            if (vmessgrpc_pos != -1):
+                insert_pos = config_data.find('\n', vmessgrpc_pos)
+                config_data = config_data[:insert_pos] + new_user_entry + config_data[insert_pos:]
+
+            # Write back the updated config
+            file.seek(0)
+            file.write(config_data)
+            file.truncate()
+
+        # VMESS links
+        asu = {
+            "v": "2",
+            "ps": username,
+            "add": domain,
+            "port": "443",
+            "id": uuid,
+            "aid": "0",
+            "net": "ws",
+            "path": "/vmess",
+            "type": "none",
+            "host": domain,
+            "tls": "tls"
+        }
+        ask = {
+            "v": "2",
+            "ps": username,
+            "add": domain,
+            "port": "80",
+            "id": uuid,
+            "aid": "0",
+            "net": "ws",
+            "path": "/vmess",
+            "type": "none",
+            "host": domain,
+            "tls": "none"
+        }
+        grpc = {
+            "v": "2",
+            "ps": username,
+            "add": domain,
+            "port": "443",
+            "id": uuid,
+            "aid": "0",
+            "net": "grpc",
+            "path": "vmess-grpc",
+            "type": "none",
+            "host": domain,
+            "tls": "tls"
+        }
+
+        vmesslink1 = f"vmess://{base64.urlsafe_b64encode(json.dumps(asu).encode()).decode()}"
+        vmesslink2 = f"vmess://{base64.urlsafe_b64encode(json.dumps(ask).encode()).decode()}"
+        vmesslink3 = f"vmess://{base64.urlsafe_b64encode(json.dumps(grpc).encode()).decode()}"
+
+        # Restart services
+        subprocess.run(['systemctl', 'restart', 'xray'])
+        subprocess.run(['service', 'cron', 'restart'])
+
+        # Send result
+        result_message = (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"  • CREATE VMESS USER •\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Remarks       : {username}\n"
+            f"Expired On    : {exp_date}\n"
+            f"Domain        : {domain}\n"
+            f"Port TLS      : 443\n"
+            f"Port none TLS : 80\n"
+            f"Port  GRPC    : 443\n"
+            f"id            : {uuid}\n"
+            f"alterId       : 0\n"
+            f"Security      : auto\n"
+            f"Network       : ws\n"
+            f"Path          : /vmess\n"
+            f"Path WSS      : wss://bug.com/vmess\n"
+            f"ServiceName   : vmess-grpc\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Link TLS : \n`{vmesslink1}`\n"
+            f"\n"
+            f"Link none TLS : \n`{vmesslink2}`\n"
+            f"\n"
+            f"Link GRPC : \n`{vmesslink3}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+
+        bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+
+# Check if username exists
+def is_username_exists(username):
+    config_path = '/etc/xray/config.json'
+    try:
+        with open(config_path, 'r') as file:
+            config_data = file.read()
+        return f'### {username} ' in config_data
+    except FileNotFoundError:
+        return False
+
+
+def renew_vmess(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_renew_username)
+
+def get_renew_username(message):
+    username = message.text
+    if is_username_exists(username):
+        # Automatically set additional expiration to 30 days
+        additional_days = 30
+        renew_callback_vmess(username, additional_days, message.chat.id)
+    else:
+        bot.send_message(message.chat.id, 'Username tidak ditemukan. Silahkan masukkan username yang benar:')
+        bot.register_next_step_handler(message, get_renew_username)
+
+def renew_callback_vmess(username, additional_days, chat_id):
+    try:
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            # Find and update expiration date in #vmess
+            user_pos = config_data.find(f'### {username} ')
+            if user_pos == -1:
+                bot.send_message(chat_id, 'Username tidak ditemukan.')
+                return
+            
+            # Get current expiration date
+            start_pos = user_pos + len(f'### {username} ')
+            end_pos = config_data.find('\n', start_pos)
+            current_exp_date = config_data[start_pos:end_pos].strip()
+            current_exp_date = datetime.strptime(current_exp_date, '%Y-%m-%d')
+            
+            # Calculate new expiration date
+            new_exp_date = (current_exp_date + timedelta(days=additional_days)).strftime('%Y-%m-%d')
+            
+            # Update expiration date in config
+            config_data = config_data[:start_pos] + new_exp_date + config_data[end_pos:]
+
+            # Find and update expiration date in #vmessgrpc
+            user_pos_grpc = config_data.find(f'### {username} ', end_pos)
+            if user_pos_grpc != -1:
+                start_pos_grpc = user_pos_grpc + len(f'### {username} ')
+                end_pos_grpc = config_data.find('\n', start_pos_grpc)
+                config_data = config_data[:start_pos_grpc] + new_exp_date + config_data[end_pos_grpc:]
+
+            # Write back updated config
+            file.seek(0)
+            file.write(config_data)
+            file.truncate()
+
+        # Restart services
+        subprocess.run(['systemctl', 'restart', 'xray'])
+        subprocess.run(['service', 'cron', 'restart'])
+
+        # Send confirmation message
+        bot.send_message(chat_id, f'User {username} telah diperpanjang hingga {new_exp_date}')
+        
+    except Exception as e:
+        bot.send_message(chat_id, f'Error: {str(e)}')
+        
+#------------------------ TROJAN PAGE --------------------
+@bot.callback_query_handler(func=lambda call: call.data == "menu_trojan") 
+def menu_trojan_handler(call):
+    sub_menu_trojan(call.message)
+    
+def sub_menu_trojan(message):
+    markup = InlineKeyboardMarkup()
+    
+    create_button = InlineKeyboardButton("NEW TROJAN ", callback_data="create_trojan")
+    renew_button = InlineKeyboardButton("RENEW TROJAN", callback_data="renew_trojan")
+    kembali = InlineKeyboardButton("KEMBALI", callback_data="kembali")
+    markup.add(create_button, renew_button)
+    markup.add(kembali)
+    
+    bot.edit_message_text(
+    chat_id=message.chat.id,
+    message_id=message.message_id,
+    text="*»»——— SAN STORE BOT ———««*\n\n"
+         "🔹 *TROJAN PREMIUM* 🔹\n\n"
+         "Region : SG\n"
+         "ISP : DigitalOcean\n"
+         "Max IP : 5IP/STB\n"
+         "*»»——— Thanks for coming ———««*",
+    parse_mode='Markdown',
+    reply_markup=markup
+    )
+#======================================#
+@bot.callback_query_handler(func=lambda call: call.data in ["create_trojan", "renew_trojan"])
+def handle_callback(call):
+    user_data = get_user_data(call.message.chat.id)
+    reseller_status = user_data['reseller_status']
+    vpn_price = 5000 if reseller_status == 'reseller' else 10000
+    
+    if call.data == "create_trojan":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            create_trojan(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+        
+    elif call.data == "renew_trojan":
+        user_balance = user_data['balance']
+        if user_balance >= vpn_price:
+            update_balance(call.message.chat.id, -vpn_price)
+            renew_trojan(call.message)
+        else:
+            bot.send_message(call.message.chat.id, "Saldo tidak cukup.")
+        
+def create_trojan(message):    
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_username_trojan)
+
+def get_username_trojan(message):
+    username = message.text
+    if is_username_exists(username):
+        bot.send_message(message.chat.id, 'Nama sudah ada, Pilih Nama lain:')
+        bot.register_next_step_handler(message, get_username_trojan)
+    else:
+        # Automatically set expiration to 30 days
+        expired_days = 30
+        exp_date = (datetime.now() + timedelta(days=expired_days)).strftime('%Y-%m-%d')
+        domain = subprocess.getoutput("cat /etc/xray/domain")
+        uuid = str(uuid4())
+
+        # Update config.json
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            # Insert new user details for trojanws and trojangrpc
+            new_user_entry = f'\n#! {username} {exp_date}\n}},{{"password": "{uuid}","email": "{username}"'
+
+            # Find the position to insert for #trojanws
+            trojanws_pos = config_data.find('#trojanws')
+            if trojanws_pos != -1:
+                insert_pos = config_data.find('\n', trojanws_pos)
+                config_data = config_data[:insert_pos] + new_user_entry + config_data[insert_pos:]
+
+            # Find the position to insert for #trojangrpc
+            trojangrpc_pos = config_data.find('#trojangrpc')
+            if trojangrpc_pos != -1:
+                insert_pos = config_data.find('\n', trojangrpc_pos)
+                config_data = config_data[:insert_pos] + new_user_entry + config_data[insert_pos:]
+
+            # Write back the updated config
+            file.seek(0)
+            file.write(config_data)
+            file.truncate()
+
+        # Trojan links
+        tr = '443'  # Assuming the port is 443 for simplicity
+        trojanlink1 = f"trojan://{uuid}@{domain}:{tr}?mode=gun&security=tls&type=grpc&serviceName=trojan-grpc&sni={domain}#{username}"
+        trojanlink2 = f"trojan://{uuid}@bug.com:{tr}?path=%2Ftrojan-ws&security=tls&host={domain}&type=ws&sni={domain}#{username}"
+
+        # Restart services
+        subprocess.run(['systemctl', 'restart', 'xray'])
+        subprocess.run(['service', 'cron', 'restart'])
+
+        # Send result
+        result_message = (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"  • CREATE TROJAN USER •\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Remarks     : {username}\n"
+            f"Expired On  : {exp_date}\n"
+            f"Host/IP     : {domain}\n"
+            f"Port        : {tr}\n"
+            f"Key         : {uuid}\n"
+            f"Path        : /trojan-ws\n"
+            f"Path WSS    : wss://bug.com/trojan-ws\n"
+            f"ServiceName : trojan-grpc\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Link WS : \n`{trojanlink2}`\n"
+            f"\n"
+            f"Link GRPC : \n`{trojanlink1}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+        
+        bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+
+def is_username_exists_trojan(username):
+    config_path = '/etc/xray/config.json'
+    try:
+        with open(config_path, 'r') as file:
+            config_data = file.read()
+        # Cek apakah nama pengguna muncul dalam konfigurasi dengan format yang tepat
+        return f'#! {username} ' in config_data
+    except FileNotFoundError:
+        return False
+
+
+def renew_trojan(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Input Username:*", parse_mode='Markdown')
+    bot.register_next_step_handler(message, get_username_for_renew)
+
+def get_username_for_renew(message):
+    username = message.text
+    if is_username_exists_trojan(username):
+        # Automatically set additional expiration to 30 days
+        additional_days = 30
+        renew_callback_trojan(username, additional_days, message.chat.id)
+    else:
+        bot.send_message(message.chat.id, 'Username tidak ditemukan, silakan coba lagi.')
+        bot.register_next_step_handler(message, get_username_for_renew)
+
+def renew_callback_trojan(username, additional_days, chat_id):
+    try:
+        # Update expiration date in config.json
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            # Find user entry and update expiration date
+            user_entry_start = config_data.find(f'#! {username} ')
+            if user_entry_start != -1:
+                # Find current expiration date
+                current_exp_date_str = config_data[user_entry_start + len(f'#! {username} '):].split('\n', 1)[0].strip()
+                try:
+                    current_exp_date = datetime.strptime(current_exp_date_str, '%Y-%m-%d')
+                except ValueError:
+                    bot.send_message(chat_id, 'Tanggal kedaluwarsa tidak valid dalam konfigurasi.')
+                    return
+
+                new_exp_date = (current_exp_date + timedelta(days=additional_days)).strftime('%Y-%m-%d')
+
+                # Replace old expiration date with new one
+                config_data = config_data[:user_entry_start + len(f'#! {username} ')] + new_exp_date + config_data[user_entry_start + len(f'#! {username} ') + len(current_exp_date_str):]
+
+                # Write back the updated config
+                file.seek(0)
+                file.write(config_data)
+                file.truncate()
+                
+                # Update expiration date in #trojangrpc
+                trojangrpc_pos = config_data.find(f'#trojangrpc')
+                if trojangrpc_pos != -1:
+                    user_entry_start = config_data.find(f'#! {username} ', trojangrpc_pos)
+                    if user_entry_start != -1:
+                        current_exp_date_str = config_data[user_entry_start + len(f'#! {username} '):].split('\n', 1)[0].strip()
+                        new_exp_date = (datetime.strptime(current_exp_date_str, '%Y-%m-%d') + timedelta(days=additional_days)).strftime('%Y-%m-%d')
+                        config_data = config_data[:user_entry_start + len(f'#! {username} ')] + new_exp_date + config_data[user_entry_start + len(f'#! {username} ') + len(current_exp_date_str):]
+                        file.seek(0)
+                        file.write(config_data)
+                        file.truncate()
+
+                # Restart services
+                subprocess.run(['systemctl', 'restart', 'xray'])
+                subprocess.run(['service', 'cron', 'restart'])
+        
+                bot.send_message(chat_id,
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"    
+                          f"• Successfully Renew •\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                          f"Username: {username}\n"
+                          f"New Expiry Date: {new_exp_date}\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                          )
+            else:
+                bot.send_message(chat_id, f'Pengguna {username} tidak ditemukan dalam konfigurasi.')
+    except Exception as e:
+        bot.send_message(chat_id, f'Error: {str(e)}')
+
+#======================== FUNGSI BALANCE =================
+@bot.message_handler(commands=['addbalance'])
+def add_balance(message):
+    if message.chat.id != admin_id:
+        bot.send_message(message.chat.id, "Anda tidak memiliki izin untuk menambahkan saldo.")
+        return
+
+    try:
+        _, user_id, amount = message.text.split()
+        user_id = int(user_id)
+        amount = int(amount)
+        update_balance(user_id, amount)
+        user_data = get_user_data(user_id)
+        bot.send_message(message.chat.id, f"Saldo berhasil ditambahkan. User {user_id} sekarang memiliki saldo: {user_data['balance']} dan status: {user_data['reseller_status']}")
+    except ValueError:
+        bot.send_message(message.chat.id, "Format salah. Gunakan /addbalance <user_id> <amount>.")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"Terjadi kesalahan: {str(e)}")
+        
+def get_vpn_price(user_id):
+    user_data = get_user_data(user_id)
+    reseller_status = user_data['reseller_status']
+    return 5000 if reseller_status == 'reseller' else 10000
+   
+#======================= FITUR HANDLE TOP UP ================
+@bot.callback_query_handler(func=lambda call: call.data == "topup") 
+def menu_topup_handler(call):
+    topup_handler(call.message)
+
+def topup_handler(message):
+    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="*Masukkan Nominal Top*", parse_mode='Markdown')
+    bot.register_next_step_handler_by_chat_id(message.chat.id, process_topup)
+        
 def process_topup(message):
     try:
         nominal = int(message.text)  # Pastikan pengguna memasukkan angka
@@ -368,7 +874,7 @@ def process_transfer_proof(message):
         nominal = user_data[chat_id]['nominal']
 
         # Kirim notifikasi ke admin
-        bot.send_photo(ADMIN_CHAT_ID, photo_id, caption=f"Permintaan Top Up\nChat ID: `{chat_id}`\nNominal: Rp `{nominal:,}`", parse_mode="Markdown")
+        bot.send_photo(admin_id, photo_id, caption=f"Permintaan Top Up\nChat ID: `{chat_id}`\nNominal: Rp `{nominal:,}`", parse_mode="Markdown")
 
         # Beri tahu pengguna bahwa permintaan mereka sedang diproses
         bot.send_message(chat_id, "Permintaan top up Anda telah dikirim dan sedang diproses.")
@@ -377,186 +883,108 @@ def process_transfer_proof(message):
         bot.send_message(chat_id, "Silakan kirimkan foto bukti transfer")
         bot.register_next_step_handler_by_chat_id(chat_id, process_transfer_proof)
         
-# Process adding balance by admin
-def process_add_balance(message):
-    try:
-        chat_id, amount = map(int, message.text.split())
-        cursor.execute("SELECT saldo FROM users WHERE chat_id = ?", (chat_id,))
-        saldo = cursor.fetchone()
 
-        if saldo:
-            new_saldo = saldo[0] + amount
-            cursor.execute("UPDATE users SET saldo = ? WHERE chat_id = ?", (new_saldo, chat_id))
-            conn.commit()
-            bot.send_message(chat_id, f"Saldo Anda telah ditambahkan sebesar {amount}. Saldo saat ini: {new_saldo}")
+#======================= BROADCAST ===================>
+@bot.callback_query_handler(func=lambda call: call.data == "broadcast") 
+def menu_trojan_handler(call):
+    broadcast_handler(call.message)
 
-            # Handle referral reward if the user was referred
-            cursor.execute("SELECT referrer_id FROM users WHERE chat_id = ?", (chat_id,))
-            referrer_id = cursor.fetchone()[0]
-            if referrer_id:
-                reward_amount = int(amount * 0.1) 
-                cursor.execute("UPDATE users SET reward = reward + ? WHERE chat_id = ?", (reward_amount, referrer_id))
-                conn.commit()
-                bot.send_message(referrer_id, f"Anda menerima reward sebesar {reward_amount} dari top up teman Anda. Reward saat ini: {reward_amount}")
+def broadcast_handler(message):
+    msg = bot.send_message(message.chat.id, "𝙄𝙨𝙞 𝘽𝙧𝙤𝙖𝙙𝙘𝙖𝙨𝙩📢")
+    bot.register_next_step_handler(msg, send_broadcast_message)
 
-            bot.send_message(ADMIN_CHAT_ID, f"Saldo pengguna dengan Chat ID {chat_id} telah ditambahkan sebesar {amount}.")
-        else:
-            bot.send_message(ADMIN_CHAT_ID, "Chat ID tidak ditemukan. Silakan coba lagi.")
-    except (ValueError, IndexError):
-        bot.send_message(ADMIN_CHAT_ID, "Format tidak valid. Silakan masukkan Chat ID dan jumlah saldo yang benar, dipisahkan dengan spasi.")
-        
-# Process adding text to file by admin
-def process_add_text(message):
-    try:
-        file_name, text = message.text.split('|', 1)
-        directory = "/root/san/bot/"
+def send_broadcast_message(message):
+    broadcast_text = message.text
 
-        # Ensure the directory exists
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+    # Connect to the database
+    connection = sqlite3.connect('user_data.db')
+    cursor = connection.cursor()
 
-        file_path = os.path.join(directory, file_name.strip())
+    # Get all users' chat IDs from the database
+    cursor.execute("SELECT user_id FROM users")
+    users = cursor.fetchall()
 
-        # Write the text to the file
-        with open(file_path, 'a') as file:
-            file.write(text.strip() + "\n")
+    if not users:
+        bot.send_message(message.chat.id, "No users found to send the broadcast.")
+        connection.close()
+        return
 
-        bot.send_message(ADMIN_CHAT_ID, f"Teks telah berhasil ditambahkan ke file {file_name}.")
-    except ValueError:
-        bot.send_message(ADMIN_CHAT_ID, "Format tidak valid. Pastikan Anda memasukkan nama file dan teks, dipisahkan oleh tanda '|'.")
-    except Exception as e:
-        bot.send_message(ADMIN_CHAT_ID, f"Terjadi kesalahan: {e}")
-        
-  # Function to process reward withdrawal by admin
-@bot.message_handler(commands=['acc'])
-def acc_cairkan_reward(message):
-    try:
-        parts = message.text.split()
-        chat_id = int(parts[1])
-
-        # Reset the reward to 0 after admin approval
-        cursor.execute("UPDATE users SET reward = 0 WHERE chat_id = ?", (chat_id,))
-        conn.commit()
-
-        bot.send_message(message.chat.id, f"Permintaan pencairan reward untuk Chat ID {chat_id} telah disetujui.")
-        bot.send_message(chat_id, "Permintaan Pencairan Reward Telah Dikirim Ke Rekening mu")
-    except (ValueError, IndexError):
-        bot.send_message(message.chat.id, "Format tidak valid. Pastikan Anda memasukkan Chat ID yang benar.")
-        
-# Fungsi untuk meminta nomor yang akan diisi
-def ask_for_number(message):
-    user_data[message.chat.id]['number'] = message.text
-    bot.send_message(message.chat.id, "Silahkan Lakukan Pembayaran Ke DANA/GOPAY : 082292615651\nAtau Melalui Qris : https://tinyurl.com/SanQris\n\nKirim Bukti Screenshot Transfer Jika selesai Dan Pesananmu Akan Diteruskan Ke Admin")
-
-# Callback handler untuk admin yang memproses transaksi
-@bot.callback_query_handler(func=lambda call: call.data.startswith("process_") or call.data.startswith("complete_"))
-def handle_admin_action(call):
-    data_parts = call.data.split('_')
-    chat_id = int(data_parts[1])
-    message_id = int(data_parts[2])
-
-    if call.data.startswith("process_"):
-        bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} sedang DIPROSES.")
-        bot.send_message(chat_id, "Transaksi Anda sedang diproses.")
-    
-    elif call.data.startswith("complete_"):
-        bot.send_message(ADMIN_CHAT_ID, f"Transaksi untuk nomor {user_data[chat_id]['number']} telah SELESAI.")
-        bot.send_message(chat_id, "Transaksi Anda telah selesai. Terima kasih!")
-        
-        # Menghapus pesan yang sudah SELESAI dari admin
-        if 'admin_message_id' in user_data[chat_id]:
-            try:
-                bot.delete_message(ADMIN_CHAT_ID, user_data[chat_id]['admin_message_id'])
-            except telebot.apihelper.ApiException as e:
-                print(f"Error deleting message: {e}")
-            del user_data[chat_id]['admin_message_id']
-            
- # Handler untuk menerima bukti pembayaran
-@bot.message_handler(content_types=['photo'])
-def handle_payment(message):
-    if message.chat.id in user_data and 'number' in user_data[message.chat.id]:
-        photo_id = message.photo[-1].file_id
-        user_data[message.chat.id]['payment_proof'] = photo_id
-        
-        # Notifikasi ke admin
-        markup = InlineKeyboardMarkup()
-        markup.row_width = 3
-        markup.add(InlineKeyboardButton("DIPROSES", callback_data=f"process_{message.chat.id}_{message.message_id}"),
-                   InlineKeyboardButton("SELESAI", callback_data=f"complete_{message.chat.id}_{message.message_id}"))
-
-        sent_message = bot.send_photo(ADMIN_CHAT_ID, photo_id, caption=f"Transaksi baru:\nKuota: {user_data[message.chat.id]['quota_type']}\nNomor: {user_data[message.chat.id]['number']}", reply_markup=markup)
-        # Menyimpan ID pesan untuk pengeditan di kemudian hari
-        user_data[message.chat.id]['admin_message_id'] = sent_message.message_id
-
-        bot.send_message(message.chat.id, "Terima kasih! Pembayaran Anda telah diterima dan akan segera diproses.")
-    else:
-        bot.send_message(message.chat.id, "Anda belum memasukkan nomor yang akan diisi. Silakan mulai lagi dengan /start.")
-            
-
-# Fungsi untuk mendapatkan nama dari pengguna
-def get_nama(message):
-    nama = message.text
-    msg = bot.send_message(message.chat.id, 'Masukkan nomor rekening. Nomor DANA/GOPAY:')
-    bot.register_next_step_handler(msg, get_nomor_rekening, nama)
-
-# Fungsi untuk mendapatkan nomor rekening dan menyimpan ke database
-def get_nomor_rekening(message, nama):
-    nomor_rekening = message.text
-
-    # Simpan atau update data ke SQLite
-    cursor.execute('INSERT OR REPLACE INTO pelanggan (chat_id, nama, nomor_rekening) VALUES (?, ?, ?)', 
-                   (message.chat.id, nama, nomor_rekening))
-    conn.commit()
-    
-    bot.send_message(message.chat.id, 'Data rekening Anda telah disimpan!')
-
-# Fungsi untuk menampilkan data rekening kepada admin secara perorangan
-@bot.message_handler(commands=['lihat_data'])
-def lihat_data_rekening(message):
-    if str(message.chat.id) == ADMIN_CHAT_ID:
+    # Send the broadcast message to each user
+    sent_count = 0
+    for user in users:
         try:
-            # Mengambil ChatID dari perintah /lihat_data {ChatID}
-            command_parts = message.text.split()
-            if len(command_parts) != 2:
-                bot.send_message(message.chat.id, 'Gunakan format: /lihat_data {ChatID}')
-                return
-            
-            target_chat_id = command_parts[1]
-            
-            # Ambil data rekening dari database berdasarkan ChatID yang diberikan
-            cursor.execute('SELECT nama, nomor_rekening FROM pelanggan WHERE chat_id = ?', (target_chat_id,))
-            data = cursor.fetchone()
-            
-            if data:
-                response = f"Data Rekening Pelanggan (ChatID: {target_chat_id}):\n\nNama: {data[0]}\nNo Rekening: {data[1]}"
-                bot.send_message(message.chat.id, response)
-            else:
-                bot.send_message(message.chat.id, f"Tidak ada data rekening untuk ChatID: {target_chat_id}")
-        
+            bot.send_message(user[0], f"📢 INFORMASI 📢\n\n{broadcast_text}")
+            sent_count += 1
         except Exception as e:
-            bot.send_message(message.chat.id, f"Terjadi kesalahan: {str(e)}")
+            print(f"Failed to send message to {user[0]}: {e}")
+
+    bot.send_message(message.chat.id, f"Pesan telah berhasil dikirim ke {sent_count} pengguna.")
+    connection.commit()
+    connection.close()
+
+#================== BACKUP & RESTORE ===============
+def backup_database():
+    if not os.path.exists(BACKUP_DIR):
+        os.makedirs(BACKUP_DIR)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = os.path.join(BACKUP_DIR, f"backup_{timestamp}.zip")
+    
+    try:
+        with zipfile.ZipFile(zip_filename, 'w') as backup_zip:
+            backup_zip.write(DB_PATH, os.path.basename(DB_PATH))
+        return zip_filename
+    except Exception as e:
+        print(f"Failed to create backup: {e}")
+        return None
+
+# Function to send the backup to the admin
+def send_backup_to_admin():
+    zip_filename = backup_database()
+    if zip_filename:
+        try:
+            with open(zip_filename, 'rb') as backup_file:
+                bot.send_document(admin_id, backup_file)
+        except Exception as e:
+            print(f"Failed to send backup to admin: {e}")
+
+# Function to restore the database from a zip file
+def restore_database(zip_filename):
+    try:
+        with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+            zip_ref.extract(os.path.basename(DB_PATH), os.path.dirname(DB_PATH))
+        print("Database restored successfully.")
+    except Exception as e:
+        print(f"Failed to restore the database: {e}")
+
+# Schedule autobackup every 6 hours
+def schedule_backup():
+    while True:
+        send_backup_to_admin()
+        threading.Event().wait(21600)  # 6 hours in seconds
+
+# Start the backup scheduler in a new thread
+backup_thread = threading.Thread(target=schedule_backup, daemon=True)
+backup_thread.start()
+
+@bot.message_handler(content_types=['document'])
+def handle_zip_file(message):
+    if str(message.chat.id) == "576495165" and message.document.mime_type == 'application/zip':
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        zip_filename = os.path.join(BACKUP_DIR, message.document.file_name)
+        
+        with open(zip_filename, 'wb') as new_file:
+            new_file.write(downloaded_file)
+        
+        restore_database(zip_filename)
+        bot.send_message(576495165, "Database berhasil dipulihkan dari backup.")
     else:
-        bot.send_message(message.chat.id, 'Anda tidak memiliki izin untuk melihat data ini.')
+        bot.send_message(message.chat.id, "You don't have permission to restore the database.")
+        
 
-# Fungsi untuk mengupdate nama pelanggan
-def update_nama(message):
-    nama_baru = message.text
-    
-    # Update nama di database
-    cursor.execute('UPDATE pelanggan SET nama = ? WHERE chat_id = ?', (nama_baru, message.chat.id))
-    conn.commit()
-    
-    bot.send_message(message.chat.id, 'Nama rekening Anda telah diperbarui!')
-
-# Fungsi untuk mengupdate nomor rekening pelanggan
-def update_rekening(message):
-    nomor_rekening_baru = message.text
-    
-    # Update nomor rekening di database
-    cursor.execute('UPDATE pelanggan SET nomor_rekening = ? WHERE chat_id = ?', (nomor_rekening_baru, message.chat.id))
-    conn.commit()
-    
-    bot.send_message(message.chat.id, 'Nomor rekening Anda telah diperbarui!')
-
-# Start polling
 bot.polling()
+
+
+
+        
