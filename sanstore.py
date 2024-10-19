@@ -94,7 +94,7 @@ def send_welcome(message):
     menu_topup = InlineKeyboardButton("💰Top Up", callback_data="topup")
     menu_ceksaldo = InlineKeyboardButton("💳Cek Saldo", callback_data="cek_saldo")
 
-    markup.add(menu_vpn, menu_kuota)
+    markup.add(menu_vpn)
     markup.add(menu_topup, menu_ceksaldo)
 
     # Cek apakah user adalah admin
