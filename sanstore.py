@@ -14,7 +14,7 @@ import threading
 import time
 
 
-API_TOKEN = '7500003101:AAHipbo4mytY-EPrTEcdz0rjKwyV_-v8iPI'
+API_TOKEN = '7360190308:AAFCXEy6tEzRvCgzF44XzlcX3PRNV-vPkxo'
 bot = telebot.TeleBot(API_TOKEN)
 
 admin_id = 576495165  
