@@ -11,6 +11,7 @@ import sqlite3
 import os
 import zipfile
 import threading
+import time
 
 
 API_TOKEN = '7500003101:AAHipbo4mytY-EPrTEcdz0rjKwyV_-v8iPI'
@@ -326,7 +327,7 @@ def create_account_action(username, password, expired_days, message):
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
     )
     
-    bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+    bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=result_message, parse_mode='Markdown')
 
 # Tambahkan dictionary untuk melacak percobaan
 user_attempts = {}
@@ -395,7 +396,7 @@ def renew_account_action(username, message):
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     )
 
-    bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+    bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=result_message, parse_mode='Markdown')
 
 def get_existing_users():
     try:
@@ -589,8 +590,8 @@ def get_username_vmess(message):
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
-        bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
-
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=result_message, parse_mode='Markdown')
+        
 # Check if username exists
 def is_username_exists(username):
     config_path = '/etc/xray/config.json'
@@ -665,16 +666,25 @@ def renew_callback_vmess(username, additional_days, chat_id):
         total_steps = 10
 
         # Mengirim pesan awal untuk progress bar
-        loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+        loading_message = bot.send_message(chat_id, "Loading [--------------------] 0%")
 
         # Mengedit pesan animasi loading secara bertahap
         for step in range(1, total_steps + 1):
             bar_message = progress_bar(step, total_steps)
-            bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+            bot.edit_message_text(chat_id=chat_id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
             time.sleep(0.3)  # Jeda waktu antar update
         
         # Send confirmation message
-        bot.send_message(chat_id, f'User {username} telah diperpanjang hingga {new_exp_date}')
+        bot.edit_message_text(chat_id=chat_id, message_id=loading_message.message_id, 
+                      text=(
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                          f"  • RENEW VMESS USER •\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                          f"Remarks       : {username}\n"
+                          f"Expired On    : {new_exp_date}\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                      ), 
+                      parse_mode='Markdown')
         
     except Exception as e:
         bot.send_message(chat_id, f'Error: {str(e)}')
@@ -778,6 +788,23 @@ def get_username_trojan(message):
         subprocess.run(['systemctl', 'restart', 'xray'])
         subprocess.run(['service', 'cron', 'restart'])
 
+        def progress_bar(progress, total, length=20):
+            filled_length = int(length * progress // total)
+            bar = '█' * filled_length + '-' * (length - filled_length)
+            return f"[{bar}] {int((progress / total) * 100)}%"
+
+        # Total iterasi untuk animasi loading
+        total_steps = 10
+
+        # Mengirim pesan awal untuk progress bar
+        loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+
+        # Mengedit pesan animasi loading secara bertahap
+        for step in range(1, total_steps + 1):
+            bar_message = progress_bar(step, total_steps)
+            bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+            time.sleep(0.3)  # Jeda waktu antar update
+
         # Send result
         result_message = (
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -798,7 +825,7 @@ def get_username_trojan(message):
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
         
-        bot.send_message(message.chat.id, result_message, parse_mode="Markdown")
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=result_message, parse_mode='Markdown')
 
 def is_username_exists_trojan(username):
     config_path = '/etc/xray/config.json'
@@ -868,15 +895,35 @@ def renew_callback_trojan(username, additional_days, chat_id):
                 # Restart services
                 subprocess.run(['systemctl', 'restart', 'xray'])
                 subprocess.run(['service', 'cron', 'restart'])
+
+                def progress_bar(progress, total, length=20):
+                    filled_length = int(length * progress // total)
+                    bar = '█' * filled_length + '-' * (length - filled_length)
+                    return f"[{bar}] {int((progress / total) * 100)}%"
+
+               # Total iterasi untuk animasi loading
+                total_steps = 10
+
+                # Mengirim pesan awal untuk progress bar
+                loading_message = bot.send_message(chat_id, "Loading [--------------------] 0%")
+
+               # Mengedit pesan animasi loading secara bertahap
+                for step in range(1, total_steps + 1):
+                    bar_message = progress_bar(step, total_steps)
+                    bot.edit_message_text(chat_id=chat_id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+                    time.sleep(0.3)  # Jeda waktu antar update
         
-                bot.send_message(chat_id,
-                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"    
-                          f"• Successfully Renew •\n"
+                bot.edit_message_text(chat_id=chat_id, message_id=loading_message.message_id, 
+                      text=(
                           f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                          f"Username: {username}\n"
-                          f"New Expiry Date: {new_exp_date}\n"
-                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                          )
+                          f"  • RENEW VMESS USER •\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                          f"Remarks       : {username}\n"
+                          f"Expired On    : {new_exp_date}\n"
+                          f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                      ), 
+                      parse_mode='Markdown')
+
             else:
                 bot.send_message(chat_id, f'Pengguna {username} tidak ditemukan dalam konfigurasi.')
     except Exception as e:
