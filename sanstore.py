@@ -285,6 +285,24 @@ def create_account_action(username, password, expired_days, message):
     # Mendapatkan tanggal expired
     exp = subprocess.getoutput(f"chage -l {username} | grep 'Account expires' | awk -F': ' '{{print $2}}'")
 
+    def progress_bar(progress, total, length=20):
+        filled_length = int(length * progress // total)
+        bar = '█' * filled_length + '-' * (length - filled_length)
+        return f"[{bar}] {int((progress / total) * 100)}%"
+
+    # Total iterasi untuk animasi loading
+    total_steps = 10
+
+    # Mengirim pesan awal untuk progress bar
+    loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+
+    # Mengedit pesan animasi loading secara bertahap
+    for step in range(1, total_steps + 1):
+        bar_message = progress_bar(step, total_steps)
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+        time.sleep(0.3)  # Jeda waktu antar update
+
+    
     # Mengirim informasi akun kepada pengguna
     result_message = (
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -349,6 +367,24 @@ def renew_account_action(username, message):
     # Memperbarui tanggal expired akun
     subprocess.run(['chage', '-E', new_exp_str, username])
 
+    def progress_bar(progress, total, length=20):
+        filled_length = int(length * progress // total)
+        bar = '█' * filled_length + '-' * (length - filled_length)
+        return f"[{bar}] {int((progress / total) * 100)}%"
+
+    # Total iterasi untuk animasi loading
+    total_steps = 10
+
+    # Mengirim pesan awal untuk progress bar
+    loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+
+    # Mengedit pesan animasi loading secara bertahap
+    for step in range(1, total_steps + 1):
+        bar_message = progress_bar(step, total_steps)
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+        time.sleep(0.3)  # Jeda waktu antar update
+
+    
     # Mengirim informasi perpanjangan kepada pengguna
     result_message = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -508,6 +544,24 @@ def get_username_vmess(message):
         subprocess.run(['systemctl', 'restart', 'xray'])
         subprocess.run(['service', 'cron', 'restart'])
 
+        def progress_bar(progress, total, length=20):
+            filled_length = int(length * progress // total)
+            bar = '█' * filled_length + '-' * (length - filled_length)
+            return f"[{bar}] {int((progress / total) * 100)}%"
+
+        # Total iterasi untuk animasi loading
+        total_steps = 10
+
+        # Mengirim pesan awal untuk progress bar
+        loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+
+    # Mengedit pesan animasi loading secara bertahap
+        for step in range(1, total_steps + 1):
+            bar_message = progress_bar(step, total_steps)
+            bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+            time.sleep(0.5)  # Jeda waktu antar update
+
+        
         # Send result
         result_message = (
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -602,6 +656,23 @@ def renew_callback_vmess(username, additional_days, chat_id):
         subprocess.run(['systemctl', 'restart', 'xray'])
         subprocess.run(['service', 'cron', 'restart'])
 
+        def progress_bar(progress, total, length=20):
+            filled_length = int(length * progress // total)
+            bar = '█' * filled_length + '-' * (length - filled_length)
+            return f"[{bar}] {int((progress / total) * 100)}%"
+
+        # Total iterasi untuk animasi loading
+        total_steps = 10
+
+        # Mengirim pesan awal untuk progress bar
+        loading_message = bot.send_message(message.chat.id, "Loading [--------------------] 0%")
+
+        # Mengedit pesan animasi loading secara bertahap
+        for step in range(1, total_steps + 1):
+            bar_message = progress_bar(step, total_steps)
+            bot.edit_message_text(chat_id=message.chat.id, message_id=loading_message.message_id, text=f"Loading {bar_message}")
+            time.sleep(0.3)  # Jeda waktu antar update
+        
         # Send confirmation message
         bot.send_message(chat_id, f'User {username} telah diperpanjang hingga {new_exp_date}')
         
