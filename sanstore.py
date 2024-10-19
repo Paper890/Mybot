@@ -91,7 +91,6 @@ def send_welcome(message):
     markup = InlineKeyboardMarkup()
 
     menu_vpn = InlineKeyboardButton("🛡️Menu VPN", callback_data="menu_vpn")
-    menu_kuota = InlineKeyboardButton("📱Menu Kuota", callback_data="menu_kuota")
     menu_topup = InlineKeyboardButton("💰Top Up", callback_data="topup")
     menu_ceksaldo = InlineKeyboardButton("💳Cek Saldo", callback_data="cek_saldo")
 
@@ -117,7 +116,7 @@ def send_welcome(message):
     )
 
 
-@bot.callback_query_handler(func=lambda call: call.data in ["menu_vpn", "menu_kuota", "cek_saldo"])
+@bot.callback_query_handler(func=lambda call: call.data in ["menu_vpn", "cek_saldo"])
 def callback_query_handler(call):
     user_data = get_user_data(call.message.chat.id)
     
