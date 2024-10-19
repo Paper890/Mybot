@@ -241,6 +241,10 @@ def renew_ssh(message):
 
 def get_username_ssh(message):
     username = message.text.strip()
+
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     
     # Validasi username: tidak boleh mengandung spasi dan panjang maksimal 8 karakter
     if ' ' in username or len(username) > 8:
@@ -325,6 +329,10 @@ user_attempts = {}
 def get_renew_ssh(message):
     username = message.text.strip()
     user_id = message.chat.id
+
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     
     # Periksa apakah pengguna sudah ada di dalam sesi percobaan
     if user_id not in user_attempts:
@@ -451,6 +459,9 @@ def create_vmess(message):
 
 def get_username_vmess(message):
     username = message.text
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     if is_username_exists(username):
         bot.send_message(message.chat.id, 'Nama sudah ada, Silahkan Masukkan Username Yang lain:')
         bot.register_next_step_handler(message, get_username_vmess)
@@ -599,6 +610,9 @@ def renew_vmess(message):
 
 def get_renew_username(message):
     username = message.text
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     if is_username_exists(username):
         # Automatically set additional expiration to 30 days
         additional_days = 30
@@ -734,6 +748,9 @@ def create_trojan(message):
 
 def get_username_trojan(message):
     username = message.text
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     if is_username_exists(username):
         bot.send_message(message.chat.id, 'Nama sudah ada, Pilih Nama lain:')
         bot.register_next_step_handler(message, get_username_trojan)
@@ -834,6 +851,9 @@ def renew_trojan(message):
 
 def get_username_for_renew(message):
     username = message.text
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     if is_username_exists_trojan(username):
         # Automatically set additional expiration to 30 days
         additional_days = 30
@@ -953,6 +973,9 @@ def topup_handler(message):
     bot.register_next_step_handler_by_chat_id(message.chat.id, process_topup)
         
 def process_topup(message):
+    if username == '/start':
+        bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
+        return  # Stop processing and return
     try:
         nominal = int(message.text)  # Pastikan pengguna memasukkan angka
         chat_id = message.chat.id
