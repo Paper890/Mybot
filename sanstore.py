@@ -122,27 +122,20 @@ def callback_query_handler(call):
     
     if call.data == "menu_vpn":
         menu_vpn(call.message)
-    elif call.data == "menu_kuota":
-        bot.send_message(call.message.chat.id, "SEGERA HADIR")
     elif call.data == "cek_saldo":
         balance = user_data['balance']
         bot.send_message(call.message.chat.id, f"Saldo Anda saat ini adalah: {balance}")
     
        
 @bot.callback_query_handler(func=lambda call: call.data == "kembali") 
-def kembali_handler(call):
-    user_data = get_user_data(call.message.chat.id)
-    reseller_status = user_data['reseller_status']
-    vpn_price = 5000 if reseller_status == 'reseller' else 10000
-    
+def kembali_handler(call): 
     markup = InlineKeyboardMarkup()
 
     menu_vpn = InlineKeyboardButton("🛡️Menu VPN", callback_data="menu_vpn")
-    menu_kuota = InlineKeyboardButton("📱Menu Kuota", callback_data="menu_kuota")
     menu_topup = InlineKeyboardButton("💰Top Up", callback_data="topup")
     menu_ceksaldo = InlineKeyboardButton("💳Cek Saldo", callback_data="cek_saldo")
 
-    markup.add(menu_vpn, menu_kuota)
+    markup.add(menu_vpn)
     markup.add(menu_topup, menu_ceksaldo)
 
     # Cek apakah user adalah admin
@@ -157,8 +150,6 @@ def kembali_handler(call):
          "🔹 *VPN Premium & Kuota Murah* 🔹\n"
          "🔒 *Kecepatan & Keamanan Terbaik*\n\n"
          "👤 *Owner: @Sanmaxx*\n\n"
-         "💲 *Status: {reseller_status.capitalize()}*\n"
-         "💵 *Harga VPN: {vpn_price}*\n\n"
          "*»»——— Thanks for coming ———««*",
     parse_mode='Markdown',
     reply_markup=markup
