@@ -935,7 +935,7 @@ def renew_callback_trojan(username, additional_days, chat_id):
                 bot.edit_message_text(chat_id=chat_id, message_id=loading_message.message_id, 
                       text=(
                           f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                          f"  • RENEW VMESS USER •\n"
+                          f"  • RENEW TROJAN USER •\n"
                           f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                           f"Remarks       : {username}\n"
                           f"Expired On    : {new_exp_date}\n"
