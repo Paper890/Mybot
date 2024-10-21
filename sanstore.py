@@ -31,6 +31,15 @@ def init_db():
                         user_id INTEGER PRIMARY KEY,
                         balance INTEGER DEFAULT 0,
                         reseller_status TEXT DEFAULT 'non reseller')''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS redeem_codes (
+                        code_name TEXT PRIMARY KEY,
+                        balance INTEGER NOT NULL,
+                        remaining_uses INTEGER NOT NULL,
+                        total_uses INTEGER NOT NULL)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS redeemed_codes (
+                        user_id INTEGER NOT NULL,
+                        code_name TEXT NOT NULL,
+                        PRIMARY KEY (user_id, code_name))''')
     # Check if the reseller_status column exists, if not, add it
     cursor.execute("PRAGMA table_info(users)")
     columns = [column[1] for column in cursor.fetchall()]
@@ -1112,8 +1121,76 @@ def handle_zip_file(message):
         bot.send_message(576495165, "Database berhasil dipulihkan dari backup.")
     else:
         bot.send_message(message.chat.id, "You don't have permission to restore the database.")
-        
 
+#=================== REDEM CODE ===================
+# Function to create a new redeem code
+def create_redeem_code(code_name, balance, total_uses):
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+    cursor.execute('''INSERT OR REPLACE INTO redeem_codes (code_name, balance, remaining_uses, total_uses)
+                      VALUES (?, ?, ?, ?)''', (code_name, balance, total_uses, total_uses))
+    conn.commit()
+    conn.close()
+
+# Command to add a new redeem code (for admin or authorized users)
+@bot.message_handler(commands=['addcode'])
+def add_code(message):
+    # Example format: /addcode code_name balance total_uses
+    if len(message.text.split()) != 4:
+        bot.reply_to(message, "Usage: /addcode <code_name> <balance> <total_uses>")
+        return
+
+    _, code_name, balance, total_uses = message.text.split()
+    balance = int(balance)
+    total_uses = int(total_uses)
+
+    # Create the redeem code
+    create_redeem_code(code_name, balance, total_uses)
+    bot.reply_to(message, f"Redeem code '{code_name}' created with {balance} balance and {total_uses} total uses.")
+
+# Handler for all text messages (redeem code processing)
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_text(message):
+    user_id = message.from_user.id
+    code_name = message.text.strip()
+
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+
+    # Check if the user has already used this redeem code
+    cursor.execute('SELECT 1 FROM redeemed_codes WHERE user_id = ? AND code_name = ?', (user_id, code_name))
+    if cursor.fetchone():
+        bot.reply_to(message, "You have already used this redeem code.")
+        conn.close()
+        return
+
+    # Check if the code exists and has remaining uses
+    cursor.execute('SELECT balance, remaining_uses FROM redeem_codes WHERE code_name = ?', (code_name,))
+    result = cursor.fetchone()
+
+    if result:
+        balance, remaining_uses = result
+        if remaining_uses > 0:
+            # Update user's balance
+            cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (balance, user_id))
+            # If user does not exist, insert new record
+            if cursor.rowcount == 0:
+                cursor.execute('INSERT INTO users (user_id, balance) VALUES (?, ?)', (user_id, balance))
+            
+            # Update remaining uses of the redeem code
+            cursor.execute('UPDATE redeem_codes SET remaining_uses = remaining_uses - 1 WHERE code_name = ?', (code_name,))
+            # Record that the user has redeemed this code
+            cursor.execute('INSERT INTO redeemed_codes (user_id, code_name) VALUES (?, ?)', (user_id, code_name))
+            bot.reply_to(message, f"Successfully redeemed {balance} balance! Remaining uses for this code: {remaining_uses - 1}")
+        else:
+            bot.reply_to(message, "This redeem code has been fully used.")
+    else:
+        bot.reply_to(message, "Invalid redeem code.")
+
+    conn.commit()
+    conn.close()
+    
+        
 bot.polling()
 
 
