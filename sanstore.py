@@ -1150,7 +1150,7 @@ def topup_handler(message):
     bot.register_next_step_handler_by_chat_id(message.chat.id, process_topup)
         
 def process_topup(message):
-    if username == '/start':
+    if message.text == '/start':
         bot.send_message(message.chat.id, "Proses pembuatan username dihentikan. Ketikkan /start untuk memulai lagi.")
         return  # Stop processing and return
     try:
