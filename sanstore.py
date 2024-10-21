@@ -212,7 +212,7 @@ def sub_menu_ssh(message):
          "🔹 *SSH PREMIUM* 🔹\n\n"
          "Region : SG\n"
          "ISP : DigitalOcean\n"
-         "Max IP : 5IP/STB\n"
+         "Support : HP & STB\n"
          "*»»——— Thanks for coming ———««*",
     parse_mode='Markdown',
     reply_markup=markup
@@ -434,7 +434,7 @@ def sub_menu_vmess(message):
          "🔹 *VMESS PREMIUM* 🔹\n\n"
          "Region : SG\n"
          "ISP : DigitalOcean\n"
-         "Max IP : 5IP/STB\n"
+         "Support : HP & STB\n"
          "*»»——— Thanks for Order ———««*",
     parse_mode='Markdown',
     reply_markup=markup
@@ -723,7 +723,7 @@ def sub_menu_trojan(message):
          "🔹 *TROJAN PREMIUM* 🔹\n\n"
          "Region : SG\n"
          "ISP : DigitalOcean\n"
-         "Max IP : 5IP/STB\n"
+         "Support : HP & STB\n"
          "*»»——— Thanks for coming ———««*",
     parse_mode='Markdown',
     reply_markup=markup
