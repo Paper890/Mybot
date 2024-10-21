@@ -75,7 +75,7 @@ def update_balance(user_id, amount):
     elif reseller_status != 'reseller' and amount >= 30000:
         # If top-up is 30,000 or more, upgrade to reseller
         cursor.execute('UPDATE users SET reseller_status = "reseller" WHERE user_id = ?', (user_id,))
-    elif reseller_status == 'reseller' and amount < 30000 and balance > 0:
+    elif reseller_status == 'reseller' and amount < 10000 and balance > 0:
         # If top-up is below 30,000 but balance is still above 0, retain reseller status
         pass
     elif amount < 30000:
