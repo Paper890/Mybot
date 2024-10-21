@@ -1303,8 +1303,8 @@ def create_redeem_code(code_name, balance, total_uses):
 # Command to add a new redeem code (for admin or authorized users)
 @bot.message_handler(commands=['addcode'])
 def add_code(message):
-    if message.from_user.id not in admin_id:
-        bot.reply_to(message, "You are not authorized to use this command.")
+    if message.chat.id != admin_id:
+        bot.send_message(message.chat.id, "Anda tidak memiliki izin")
         return
     # Example format: /addcode code_name balance total_uses
     if len(message.text.split()) != 4:
