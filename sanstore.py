@@ -1195,7 +1195,7 @@ def handle_text(message):
 @bot.message_handler(commands=['admin'])
 def start_command(message):
     # Check if the user is the admin
-    if message.chat.id == ADMIN_CHAT_ID:
+    if message.chat.id == 576495165:
         # Create an inline keyboard
         markup = InlineKeyboardMarkup()
 
@@ -1214,12 +1214,6 @@ def start_command(message):
 # Callback handler for specific inline button data
 @bot.callback_query_handler(func=lambda call: call.data in ["delete_ssh", "delete_vmess", "delete_trojan"])
 def handle_callback(call):
-    # Check if the user is the admin
-    if call.message.chat.id != 576495165:
-        bot.answer_callback_query(call.id, "Access denied.")
-        return
-
-    # Handle the button actions
     if call.data == "delete_ssh":
         delete_ssh_account(call.message)
     elif call.data == "delete_vmess":
