@@ -1032,16 +1032,18 @@ def delete_vmess_account(username, chat_id):
                 return
 
             # Find the end of the user entry
-            end_pos = config_data.find('\n', user_pos) + 1
+            end_pos = config_data.find('\n', user_pos)  # End of the first line
+            second_line_end = config_data.find('\n', end_pos + 1) + 1  # End of the second line
 
             # Remove the user entry from the config
-            config_data = config_data[:user_pos] + config_data[end_pos:]
-
+            config_data = config_data[:user_pos] + config_data[second_line_end:]
+            
             # Find and remove user entry in #vmessgrpc if it exists
             user_pos_grpc = config_data.find(f'### {username} ')
             if user_pos_grpc != -1:
                 end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
-                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
+                second_line_end = config_data.find('\n', end_pos_grpc + 1) + 1
+                config_data = config_data[:user_pos_grpc] + config_data[second_line_end:]
 
             # Write back the updated config
             file.seek(0)
@@ -1079,22 +1081,25 @@ def delete_trojan_account(username, chat_id):
         with open(config_path, 'r+') as file:
             config_data = file.read()
 
+            # Find and remove user entry in #vmess
             user_pos = config_data.find(f'#! {username} ')
             if user_pos == -1:
                 bot.send_message(chat_id, 'Username tidak ditemukan.')
                 return
 
             # Find the end of the user entry
-            end_pos = config_data.find('\n', user_pos) + 1
+            end_pos = config_data.find('\n', user_pos)  # End of the first line
+            second_line_end = config_data.find('\n', end_pos + 1) + 1  # End of the second line
 
             # Remove the user entry from the config
-            config_data = config_data[:user_pos] + config_data[end_pos:]
-
-            # Find and remove user entry in grpc if it exists
+            config_data = config_data[:user_pos] + config_data[second_line_end:]
+            
+            # Find and remove user entry in #vmessgrpc if it exists
             user_pos_grpc = config_data.find(f'#! {username} ')
             if user_pos_grpc != -1:
                 end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
-                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
+                second_line_end = config_data.find('\n', end_pos_grpc + 1) + 1
+                config_data = config_data[:user_pos_grpc] + config_data[second_line_end:]
 
             # Write back the updated config
             file.seek(0)
