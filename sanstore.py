@@ -948,6 +948,169 @@ def renew_callback_trojan(username, additional_days, chat_id):
     except Exception as e:
         bot.send_message(chat_id, f'Error: {str(e)}')
 
+#================== COMMAND DELETE ACCOUNT ===========
+
+@bot.message_handler(commands=['admin'])
+def start_command(message):
+    # Check if the user is the admin
+    if message.chat.id == 576495165:
+        # Create an inline keyboard
+        markup = InlineKeyboardMarkup()
+
+        ssh = InlineKeyboardButton("DELETE SSH", callback_data="delete_ssh")
+        vmess = InlineKeyboardButton("DELETE VMESS", callback_data="delete_vmess")
+        trojan = InlineKeyboardButton("DELETE TROJAN", callback_data="delete_trojan")
+
+        markup.add(ssh)
+        markup.add(vmess, trojan)
+        
+        bot.send_message(message.chat.id, "Halo Tuan....", reply_markup=markup)
+    else:
+        # If the user is not the admin, deny access
+        bot.send_message(message.chat.id, "Access denied. You are not authorized to use this bot.")
+
+# Callback handler for specific inline button data
+@bot.callback_query_handler(func=lambda call: call.data in ["delete_ssh", "delete_vmess", "delete_trojan"])
+def handle_callback(call):
+    if call.data == "delete_ssh":
+        delete_ssh_account(call.message)
+    elif call.data == "delete_vmess":
+        delete_vmess(call.message)
+    elif call.data == "delete_trojan":
+        delete_trojan(call.message)
+    
+
+#=============== DELETE SSH ======================
+def delete_ssh_account(message):
+    bot.send_message(message.chat.id, 'Input the SSH username to delete:')
+    bot.register_next_step_handler(message, handle_delete_username)
+
+def handle_delete_username(message):
+    username = message.text
+    if is_user_exists(username):
+        try:
+            # Delete the user account
+            subprocess.run(['userdel', '-r', username], check=True)
+            bot.send_message(message.chat.id, f'User {username} has been deleted successfully.')
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Error deleting user {username}: {str(e)}')
+    else:
+        bot.send_message(message.chat.id, 'User does not exist. Please provide a valid username.')
+
+def is_user_exists(username):
+    try:
+        # Check if the user exists in the system
+        result = subprocess.run(['id', username], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+#====================== FUNGSI DELETE VMESS =============
+
+def delete_vmess(message):
+    bot.send_message(message.chat.id, 'Input Username to Delete:')
+    bot.register_next_step_handler(message, get_delete_username_vmess)
+
+def get_delete_username_vmess(message):
+    username = message.text
+    if is_username_exists(username):
+        delete_vmess_account(username, message.chat.id)
+    else:
+        bot.send_message(message.chat.id, 'Username tidak ditemukan. Silahkan masukkan username yang benar:')
+        bot.register_next_step_handler(message, get_delete_username_vmess)
+
+def delete_vmess_account(username, chat_id):
+    try:
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            # Find and remove user entry in #vmess
+            user_pos = config_data.find(f'### {username} ')
+            if user_pos == -1:
+                bot.send_message(chat_id, 'Username tidak ditemukan.')
+                return
+
+            # Find the end of the user entry
+            end_pos = config_data.find('\n', user_pos) + 1
+
+            # Remove the user entry from the config
+            config_data = config_data[:user_pos] + config_data[end_pos:]
+
+            # Find and remove user entry in #vmessgrpc if it exists
+            user_pos_grpc = config_data.find(f'### {username} ')
+            if user_pos_grpc != -1:
+                end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
+                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
+
+            # Write back the updated config
+            file.seek(0)
+            file.write(config_data)
+            file.truncate()
+
+        # Restart services
+        subprocess.run(['systemctl', 'restart', 'xray'])
+        subprocess.run(['service', 'cron', 'restart'])
+
+        # Send confirmation message
+        bot.send_message(chat_id, f'User {username} telah dihapus dari config.')
+
+    except Exception as e:
+        bot.send_message(chat_id, f'Error: {str(e)}')
+        
+        
+#=========================== DELETE TROJAN =====================
+
+def delete_trojan(message):
+    bot.send_message(message.chat.id, 'Input Username to Delete:')
+    bot.register_next_step_handler(message, get_delete_username_trojan)
+
+def get_delete_username_trojan(message):
+    username = message.text
+    if is_username_exists_trojan(username):
+        delete_trojan_account(username, message.chat.id)
+    else:
+        bot.send_message(message.chat.id, 'Username tidak ditemukan. Silahkan masukkan username yang benar:')
+        bot.register_next_step_handler(message, get_delete_username_trojan)
+
+def delete_trojan_account(username, chat_id):
+    try:
+        config_path = '/etc/xray/config.json'
+        with open(config_path, 'r+') as file:
+            config_data = file.read()
+
+            user_pos = config_data.find(f'#! {username} ')
+            if user_pos == -1:
+                bot.send_message(chat_id, 'Username tidak ditemukan.')
+                return
+
+            # Find the end of the user entry
+            end_pos = config_data.find('\n', user_pos) + 1
+
+            # Remove the user entry from the config
+            config_data = config_data[:user_pos] + config_data[end_pos:]
+
+            # Find and remove user entry in grpc if it exists
+            user_pos_grpc = config_data.find(f'#! {username} ')
+            if user_pos_grpc != -1:
+                end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
+                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
+
+            # Write back the updated config
+            file.seek(0)
+            file.write(config_data)
+            file.truncate()
+
+        # Restart services
+        subprocess.run(['systemctl', 'restart', 'xray'])
+        subprocess.run(['service', 'cron', 'restart'])
+
+        # Send confirmation message
+        bot.send_message(chat_id, f'User {username} telah dihapus dari config.')
+
+    except Exception as e:
+        bot.send_message(chat_id, f'Error: {str(e)}')
+               
 #======================== FUNGSI BALANCE =================
 @bot.message_handler(commands=['addbalance'])
 def add_balance(message):
@@ -1190,172 +1353,4 @@ def handle_text(message):
     conn.commit()
     conn.close()
 
-#================== COMMAND DELETE ACCOUNT ===========
-
-@bot.message_handler(commands=['admin'])
-def start_command(message):
-    # Check if the user is the admin
-    if message.chat.id == 576495165:
-        # Create an inline keyboard
-        markup = InlineKeyboardMarkup()
-
-        ssh = InlineKeyboardButton("DELETE SSH", callback_data="delete_ssh")
-        vmess = InlineKeyboardButton("DELETE VMESS", callback_data="delete_vmess")
-        trojan = InlineKeyboardButton("DELETE TROJAN", callback_data="delete_trojan")
-
-        markup.add(ssh)
-        markup.add(vmess, trojan)
-        
-        bot.send_message(message.chat.id, "Halo Tuan....", reply_markup=markup)
-    else:
-        # If the user is not the admin, deny access
-        bot.send_message(message.chat.id, "Access denied. You are not authorized to use this bot.")
-
-# Callback handler for specific inline button data
-@bot.callback_query_handler(func=lambda call: call.data in ["delete_ssh", "delete_vmess", "delete_trojan"])
-def handle_callback(call):
-    if call.data == "delete_ssh":
-        delete_ssh_account(call.message)
-    elif call.data == "delete_vmess":
-        delete_vmess(call.message)
-    elif call.data == "delete_trojan":
-        delete_trojan(call.message)
-    
-
-#=============== DELETE SSH ======================
-def delete_ssh_account(message):
-    bot.send_message(message.chat.id, 'Input the SSH username to delete:')
-    bot.register_next_step_handler(message, handle_delete_username)
-
-def handle_delete_username(message):
-    username = message.text
-    if is_user_exists(username):
-        try:
-            # Delete the user account
-            subprocess.run(['userdel', '-r', username], check=True)
-            bot.send_message(message.chat.id, f'User {username} has been deleted successfully.')
-        except Exception as e:
-            bot.send_message(message.chat.id, f'Error deleting user {username}: {str(e)}')
-    else:
-        bot.send_message(message.chat.id, 'User does not exist. Please provide a valid username.')
-
-def is_user_exists(username):
-    try:
-        # Check if the user exists in the system
-        result = subprocess.run(['id', username], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-#====================== FUNGSI DELETE VMESS =============
-
-def delete_vmess(message):
-    bot.send_message(message.chat.id, 'Input Username to Delete:')
-    bot.register_next_step_handler(message, get_delete_username_vmess)
-
-def get_delete_username_vmess(message):
-    username = message.text
-    if is_username_exists(username):
-        delete_vmess_account(username, message.chat.id)
-    else:
-        bot.send_message(message.chat.id, 'Username tidak ditemukan. Silahkan masukkan username yang benar:')
-        bot.register_next_step_handler(message, get_delete_username_vmess)
-
-def delete_vmess_account(username, chat_id):
-    try:
-        config_path = '/etc/xray/config.json'
-        with open(config_path, 'r+') as file:
-            config_data = file.read()
-
-            # Find and remove user entry in #vmess
-            user_pos = config_data.find(f'### {username} ')
-            if user_pos == -1:
-                bot.send_message(chat_id, 'Username tidak ditemukan.')
-                return
-
-            # Find the end of the user entry
-            end_pos = config_data.find('\n', user_pos) + 1
-
-            # Remove the user entry from the config
-            config_data = config_data[:user_pos] + config_data[end_pos:]
-
-            # Find and remove user entry in #vmessgrpc if it exists
-            user_pos_grpc = config_data.find(f'### {username} ')
-            if user_pos_grpc != -1:
-                end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
-                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
-
-            # Write back the updated config
-            file.seek(0)
-            file.write(config_data)
-            file.truncate()
-
-        # Restart services
-        subprocess.run(['systemctl', 'restart', 'xray'])
-        subprocess.run(['service', 'cron', 'restart'])
-
-        # Send confirmation message
-        bot.send_message(chat_id, f'User {username} telah dihapus dari config.')
-
-    except Exception as e:
-        bot.send_message(chat_id, f'Error: {str(e)}')
-        
-        
-#=========================== DELETE TROJAN =====================
-
-def delete_trojan(message):
-    bot.send_message(message.chat.id, 'Input Username to Delete:')
-    bot.register_next_step_handler(message, get_delete_username_trojan)
-
-def get_delete_username_trojan(message):
-    username = message.text
-    if is_username_exists_trojan(username):
-        delete_trojan_account(username, message.chat.id)
-    else:
-        bot.send_message(message.chat.id, 'Username tidak ditemukan. Silahkan masukkan username yang benar:')
-        bot.register_next_step_handler(message, get_delete_username_trojan)
-
-def delete_trojan_account(username, chat_id):
-    try:
-        config_path = '/etc/xray/config.json'
-        with open(config_path, 'r+') as file:
-            config_data = file.read()
-
-            user_pos = config_data.find(f'#! {username} ')
-            if user_pos == -1:
-                bot.send_message(chat_id, 'Username tidak ditemukan.')
-                return
-
-            # Find the end of the user entry
-            end_pos = config_data.find('\n', user_pos) + 1
-
-            # Remove the user entry from the config
-            config_data = config_data[:user_pos] + config_data[end_pos:]
-
-            # Find and remove user entry in grpc if it exists
-            user_pos_grpc = config_data.find(f'#! {username} ')
-            if user_pos_grpc != -1:
-                end_pos_grpc = config_data.find('\n', user_pos_grpc) + 1
-                config_data = config_data[:user_pos_grpc] + config_data[end_pos_grpc:]
-
-            # Write back the updated config
-            file.seek(0)
-            file.write(config_data)
-            file.truncate()
-
-        # Restart services
-        subprocess.run(['systemctl', 'restart', 'xray'])
-        subprocess.run(['service', 'cron', 'restart'])
-
-        # Send confirmation message
-        bot.send_message(chat_id, f'User {username} telah dihapus dari config.')
-
-    except Exception as e:
-        bot.send_message(chat_id, f'Error: {str(e)}')
-               
-        
 bot.polling()
-
-
-
-        
