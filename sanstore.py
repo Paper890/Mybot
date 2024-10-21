@@ -1215,7 +1215,7 @@ def start_command(message):
 @bot.callback_query_handler(func=lambda call: call.data in ["delete_ssh", "delete_vmess", "delete_trojan"])
 def handle_callback(call):
     # Check if the user is the admin
-    if call.message.chat.id != ADMIN_CHAT_ID:
+    if call.message.chat.id != 576495165:
         bot.answer_callback_query(call.id, "Access denied.")
         return
 
