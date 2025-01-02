@@ -115,7 +115,7 @@ def handle_size_callback(call: CallbackQuery):
         return
 
     region = 'sgp1'
-    image = 'ubuntu-20-04-x64'
+    image = 'debian-12-x64'
     
     data = {
         'name': droplet_name,
