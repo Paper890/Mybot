@@ -337,7 +337,153 @@ systemctl daemon-reload
 systemctl enable do
 systemctl start do
 
-echo "Berhasil Di install" 
+echo "Berhasil Install DO" 
 
+#!/bin/bash
+mkdir -p /root/san/bot
+cd /root/san/bot
+
+cat << 'EOF' > dns.py
+import telebot
+from telebot import types
+import requests
+import json
+
+# Konfigurasi bot Telegram
+bot_token = '7336371877:AAGxgO7pWRCvZrd3hiXWgMfAkGLfPxcntwg'
+bot = telebot.TeleBot(bot_token)
+
+# Konfigurasi Cloudflare
+cloudflare_api_token = 'mHxjeQgvZhqWGL2T8mTs866h4Kqi1xncAiJDWvSc'
+zone_id = 'f7400aabacca20ee7f6227f716396fab'
+base_url = f'https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records'
+
+# Fungsi untuk menambahkan DNS record
+def add_dns_record(type="A", name="", content="", ttl=1, proxied=False):
+    headers = {
+        'Authorization': f'Bearer {cloudflare_api_token}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'type': type,
+        'name': name,
+        'content': content,
+        'ttl': ttl,
+        'proxied': proxied
+    }
+    response = requests.post(base_url, headers=headers, data=json.dumps(data))
+    return response.json()
+
+# Fungsi untuk mengedit DNS record
+def edit_dns_record(record_id, type="A", name="", content="", ttl=1, proxied=False):
+    headers = {
+        'Authorization': f'Bearer {cloudflare_api_token}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'type': type,
+        'name': name,
+        'content': content,
+        'ttl': ttl,
+        'proxied': proxied
+    }
+    url = f'{base_url}/{record_id}'
+    response = requests.put(url, headers=headers, data=json.dumps(data))
+    return response.json()
+
+# Fungsi untuk mendapatkan ID DNS record berdasarkan nama
+def get_dns_record_id(name):
+    headers = {
+        'Authorization': f'Bearer {cloudflare_api_token}',
+        'Content-Type': 'application/json'
+    }
+    response = requests.get(base_url, headers=headers)
+    records = response.json().get('result', [])
+    for record in records:
+        if record['name'] == name:
+            return record['id']
+    return None
+
+# Command handler untuk /start
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    markup = types.InlineKeyboardMarkup()
+    btn_add = types.InlineKeyboardButton("ADD DNS", callback_data="add_dns")
+    btn_edit = types.InlineKeyboardButton("EDIT DNS", callback_data="edit_dns")
+    markup.add(btn_add, btn_edit)
+    bot.send_message(message.chat.id, "Pilih tindakan:", reply_markup=markup)
+
+# Callback handler untuk tombol InlineKeyboardButton
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    if call.data == "add_dns":
+        bot.send_message(call.message.chat.id, "Masukkan nama domain:")
+        bot.register_next_step_handler(call.message, get_dns_name_to_add)
+    elif call.data == "edit_dns":
+        bot.send_message(call.message.chat.id, "Masukkan nama domain yang ingin diubah:")
+        bot.register_next_step_handler(call.message, get_edit_dns_name)
+
+# Fungsi untuk menambah DNS record
+def get_dns_name_to_add(message):
+    dns_name = message.text
+    bot.reply_to(message, "Masukkan konten (misalnya alamat IP):")
+    bot.register_next_step_handler(message, get_dns_content_to_add, dns_name)
+
+def get_dns_content_to_add(message, dns_name):
+    dns_content = message.text
+    result = add_dns_record(name=dns_name, content=dns_content)
+    if result.get('success'):
+        bot.reply_to(
+            message, 
+            f"Registrasi DNS Record\nDNS : `{dns_name}.easyvpn.biz.id`\nIP : `{dns_content}`", 
+            parse_mode="MarkdownV2"
+        )
+    else:
+        bot.reply_to(message, f"Terjadi kesalahan: {result.get('errors')}")
+
+# Fungsi untuk mengedit DNS record
+def get_edit_dns_name(message):
+    dns_name = message.text
+    record_id = get_dns_record_id(dns_name)
+    if record_id:
+        bot.reply_to(message, "Masukkan konten baru (misalnya alamat IP):")
+        bot.register_next_step_handler(message, get_new_dns_content, record_id, dns_name)
+    else:
+        bot.reply_to(message, "DNS record tidak ditemukan.")
+
+def get_new_dns_content(message, record_id, dns_name):
+    dns_content = message.text
+    result = edit_dns_record(record_id, name=dns_name, content=dns_content)
+    if result.get('success'):
+        bot.reply_to(message, "Sukses✓")
+    else:
+        bot.reply_to(message, f"Terjadi kesalahan: {result.get('errors')}")
+
+# Menjalankan bot
+bot.polling()
+
+EOF
+
+cat << 'EOF' > /etc/systemd/system/dns.service
+[Unit]
+Description=Telegram Bot
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/san/bot
+ExecStart=/usr/bin/python3 dns.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload 
+sudo systemctl start dns
+sudo systemctl enable dns
+
+echo "Berhasil Install DNS"
+echo "Sukses✓"
 cd
 rm DO.sh
