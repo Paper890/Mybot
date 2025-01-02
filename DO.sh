@@ -338,11 +338,7 @@ systemctl enable do
 systemctl start do
 
 echo "Berhasil Install DO" 
-
-#!/bin/bash
-mkdir -p /root/san/bot
-cd /root/san/bot
-
+#==============================================================
 cat << 'EOF' > dns.py
 import telebot
 from telebot import types
